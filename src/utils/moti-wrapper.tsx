@@ -12,12 +12,13 @@ import { Platform, View } from "react-native";
 let MotiView: ComponentType<any>;
 
 if (Platform.OS === "web") {
-  MotiView = (props: any) => {
+  MotiView = function MotiView(props: any) {
     const { children, ...rest } = props;
     return React.createElement(View, rest, children);
   };
 } else {
   // import lazily to avoid bundling issues on web
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { MotiView: NativeMotiView } = require("moti");
   MotiView = NativeMotiView;
 }

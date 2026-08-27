@@ -25,7 +25,7 @@ export default function QuizOption({
   const { theme, isDark } = useTheme();
 
   let borderColor = isDark ? "#2A2C2E" : "#eee";
-  let bgColor = isDark ? "#1C1E1F" : "#fff";
+  let bgColor = isDark ? "#111827" : "#fff";
 
   if (isSelected) borderColor = theme.tint;
   if (isCorrect) {

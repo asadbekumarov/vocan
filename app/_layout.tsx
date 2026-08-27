@@ -35,7 +35,7 @@ function RootLayoutContent() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Toast />
+      <Toast position="top" topOffset={60} />
     </NavigationThemeProvider>
   );
 }

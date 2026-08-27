@@ -18,15 +18,15 @@ const MotionConfigContext = React.createContext({});
 const PresenceContext = React.createContext([true, null]);
 
 const motion = {
-  div: React.forwardRef((props, ref) => {
+  div: React.forwardRef(function Div(props, ref) {
     const { children, ...rest } = props;
     return React.createElement("div", { ref, ...rest }, children);
   }),
-  span: React.forwardRef((props, ref) => {
+  span: React.forwardRef(function Span(props, ref) {
     const { children, ...rest } = props;
     return React.createElement("span", { ref, ...rest }, children);
   }),
-  View: React.forwardRef((props, ref) => {
+  View: React.forwardRef(function View(props, ref) {
     const { children, ...rest } = props;
     return React.createElement("div", { ref, ...rest }, children);
   }),

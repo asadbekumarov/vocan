@@ -2,12 +2,18 @@ import { Word } from "@/types/Word";
 
 export type QuizMode = "uz-en" | "en-uz" | "uz-ru" | "ru-uz" | "en-ru" | "ru-en";
 
-export const generateQuiz = (words: Word[], mode: QuizMode = "uz-en", correctWord?: Word) => {
+export const generateQuiz = (
+  words: Word[],
+  mode: QuizMode = "uz-en",
+  correctWord?: Word,
+  allowedTypes: string[] = ["multiple", "input", "speech"]
+) => {
   if (words.length < 4) return null;
 
   // Use provided word or pick a random one
-  const correctWordToUse = correctWord || words[Math.floor(Math.random() * words.length)];
-  const correctIndex = words.findIndex(w => w.id === correctWordToUse.id);
+  const correctWordToUse =
+    correctWord || words[Math.floor(Math.random() * words.length)];
+  const correctIndex = words.findIndex((w) => w.id === correctWordToUse.id);
 
   let question = "";
   let answer = "";
@@ -27,19 +33,31 @@ export const generateQuiz = (words: Word[], mode: QuizMode = "uz-en", correctWor
     const randomIndex = Math.floor(Math.random() * otherWords.length);
     const distractorWord = otherWords.splice(randomIndex, 1)[0];
     const distractorValue = distractorWord[to] as string;
-    
-    // Ensure distractor is not same as answer and is not empty
-    if (distractorValue && distractorValue !== answer && !distractors.includes(distractorValue)) {
+
+    // Ensure distractor is not same as answer and is not empty and not already in distractors
+    if (
+      distractorValue &&
+      distractorValue.trim().toLowerCase() !== answer.trim().toLowerCase() &&
+      !distractors.some(
+        (d) =>
+          d.trim().toLowerCase() === distractorValue.trim().toLowerCase()
+      )
+    ) {
       distractors.push(distractorValue);
     }
   }
 
-  // Shuffle options
+  // If we couldn't find 3 unique distractors, just take whatever we have
   const options = [answer, ...distractors].sort(() => Math.random() - 0.5);
+
+  // Randomly pick question type from allowed types
+  const type = allowedTypes[Math.floor(Math.random() * allowedTypes.length)];
 
   return {
     question,
     options,
     correctAnswer: answer,
+    type,
+    word: correctWordToUse,
   };
 };

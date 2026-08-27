@@ -5,26 +5,53 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#16a34a';
-const tintColorDark = '#16a34a';
+const tintColorLight = '#22C55E';
+const tintColorDark = '#22C55E';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#f0fdf4',
+    text: '#111827',
+    background: '#F9FAFB',
+    card: '#FFFFFF',
     tint: tintColorLight,
-    icon: '#16a34a',
-    tabIconDefault: '#888',
+    icon: '#6B7280',
+    tabIconDefault: '#9CA3AF',
     tabIconSelected: tintColorLight,
+    border: '#E5E7EB',
+    secondary: '#F3F4F6',
+    pressed: '#16A34A',
+    muted: '#9CA3AF',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#F9FAFB',
+    background: '#0F172A',
+    card: '#111827',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#9CA3AF',
+    tabIconDefault: '#4B5563',
     tabIconSelected: tintColorDark,
+    border: '#1F2937',
+    secondary: '#020617',
+    pressed: '#16A34A',
+    muted: '#6B7280',
   },
+};
+
+export const UI = {
+  padding: 20,
+  borderRadius: {
+    small: 8,
+    medium: 12,
+    large: 20,
+    xl: 24,
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  }
 };
 
 export const Fonts = Platform.select({

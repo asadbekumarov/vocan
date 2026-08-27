@@ -44,6 +44,16 @@ export const deleteWord = async (id: string) => {
     }
 };
 
+export const deleteMultipleWords = async (ids: string[]) => {
+    try {
+        const words = await getWords();
+        const newWords = words.filter((w) => !ids.includes(w.id));
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newWords));
+    } catch (e) {
+        console.error("Error deleting multiple words", e);
+    }
+};
+
 export const updateWord = async (updatedWord: Word) => {
     try {
         const words = await getWords();
@@ -54,5 +64,4 @@ export const updateWord = async (updatedWord: Word) => {
     }
 };
 
-export type { Word };
 
