@@ -11,6 +11,7 @@ import { MotiView } from "@/utils/moti-wrapper";
 import { Ionicons } from "@expo/vector-icons";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import { parseExtractedText, recognizeTextFromImage } from "@/utils/ocrService";
 import { useLocalSearchParams, router } from "expo-router";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -32,8 +33,6 @@ import {
 import Toast from "react-native-toast-message";
 
 type Mode = "uz-en" | "en-uz" | "uz-ru" | "ru-uz" | "en-ru" | "ru-en";
-
-const OCR_API_KEY = "helloworld"; // TODO: .env fayliga ko'chiring: EXPO_PUBLIC_OCR_API_KEY
 
 const MODES: { id: Mode; from: string; to: string; label: string; color: string }[] = [
   { id: "uz-en", from: "UZ", to: "EN", label: "UZ → EN", color: Palette.emerald500 },
@@ -75,8 +74,11 @@ export default function AddWordScreen() {
   const [errors, setErrors] = useState<{ uz?: boolean; en?: boolean; ru?: boolean }>({});
   const [focusedField, setFocusedField] = useState<"uz" | "en" | "ru" | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
+  const [ocrProgressText, setOcrProgressText] = useState("");
   const [scannedWords, setScannedWords] = useState<ScannedWord[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isManualInputVisible, setIsManualInputVisible] = useState(false);
+  const [manualTextInput, setManualTextInput] = useState("");
 
   // Edit state for scanned words
   const [editingScannedWordId, setEditingScannedWordId] = useState<string | null>(null);
@@ -169,144 +171,177 @@ export default function AddWordScreen() {
   const processImageWithVisionAPI = async (base64Image: string) => {
     try {
       setLoadingImage(true);
+      setOcrProgressText("Rasm tahlil qilinmoqda...");
 
-      const formData = new FormData();
-      formData.append("base64Image", `data:image/jpeg;base64,${base64Image}`);
-      formData.append("language", "eng");
-      formData.append("isOverlayRequired", "false");
-      formData.append("isTable", "true");
-
-      const response = await fetch("https://api.ocr.space/parse/image", {
-        method: "POST",
-        headers: {
-          apikey: OCR_API_KEY,
-        },
-        body: formData,
+      const extractedText = await recognizeTextFromImage(base64Image, (progress) => {
+        setOcrProgressText(progress);
       });
 
-      const result = await response.json();
+      const extractedWords = parseExtractedText(extractedText);
 
-      if (result.IsErroredOnProcessing) {
-        const errorMessage =
-          result.ErrorMessage && Array.isArray(result.ErrorMessage)
-            ? result.ErrorMessage.join(", ")
-            : "OCR API noma'lum xatolik qaytardi";
-        throw new Error(errorMessage);
-      }
-
-      if (
-        result.ParsedResults &&
-        result.ParsedResults.length > 0 &&
-        result.ParsedResults[0].ParsedText
-      ) {
-        const fullText = result.ParsedResults[0].ParsedText;
-        const lines = fullText.split(/\r?\n/).filter((line: string) => line.trim().length > 0);
-
-        const extractedWords: ScannedWord[] = [];
-
-        lines.forEach((line: string, index: number) => {
-          let word = "";
-          let pronunciation = "";
-          let translation = "";
-
-          const parts = line.split(/[-–—:]+/);
-
-          if (parts.length >= 2) {
-            word = parts[0].trim();
-            translation = parts.slice(1).join(" ").trim();
-
-            const pronMatch = word.match(/\[(.*?)\]|\/(.*?)\//);
-            if (pronMatch) {
-              pronunciation = pronMatch[1] || pronMatch[2];
-              word = word.replace(/\[(.*?)\]|\/(.*?)\//, "").trim();
-            }
-
-            if (word && translation) {
-              extractedWords.push({
-                id: `${Date.now()}_${index}`,
-                word,
-                pronunciation,
-                translation,
-                selected: true,
-              });
-            }
-          }
+      if (extractedWords.length > 0) {
+        setScannedWords(extractedWords);
+        setIsModalVisible(true);
+        Toast.show({
+          type: "success",
+          text1: "Matn muvaffaqiyatli o'qildi",
+          text2: `${extractedWords.length} ta so'z ajratib olindi`,
         });
-
-        if (extractedWords.length > 0) {
-          setScannedWords(extractedWords);
-          setIsModalVisible(true);
-        } else {
-          Alert.alert(
-            "So'zlar topilmadi",
-            "Rasmdan so'z va tarjima formatidagi matn ajratib olinmadi (Format: word - translation).",
-          );
-        }
+      } else if (extractedText && extractedText.trim().length > 0) {
+        // Fallback: If raw text was found but no structure detected, load it into manual editor
+        setManualTextInput(extractedText.trim());
+        setIsManualInputVisible(true);
+        Toast.show({
+          type: "info",
+          text1: "Matn o'qildi",
+          text2: "Formatlash uchun matnni ko'rib chiqing va tasdiqlang",
+        });
       } else {
-        Alert.alert("Xatolik", "Rasmdan hech qanday matn o'qib bo'lmadi.");
+        Alert.alert(
+          "So'zlar topilmadi",
+          "Rasmdan aniq matn o'qib bo'lmadi. Iltimos, aniqroq yoki yorug'roq rasm tanlang."
+        );
       }
     } catch (error: any) {
       console.error("OCR Error:", error);
-      Alert.alert("Xatolik yuz berdi", error.message || "Rasm tahlilida xatolik");
+      Alert.alert(
+        "Tahlilda xatolik yuz berdi",
+        (error?.message || "Rasmni o'qishda xatolik yuz berdi.") +
+          "\n\nMatnni o'zingiz qo'lda nusxalab qo'yishni xohlaysizmi?",
+        [
+          { text: "Bekor qilish", style: "cancel" },
+          { text: "Matn kiritish", onPress: () => setIsManualInputVisible(true) },
+        ]
+      );
     } finally {
       setLoadingImage(false);
+      setOcrProgressText("");
     }
   };
 
   const handlePickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert("Ruxsat kerak", "Galereyaga kirish uchun ruxsat berishingiz zarur.");
-        return;
+      if (Platform.OS !== "web") {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permissionResult.granted) {
+          Alert.alert("Ruxsat kerak", "Galereyaga kirish uchun ruxsat berishingiz zarur.");
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: Platform.OS !== "web",
+        quality: 0.85,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const manipResult = await manipulateAsync(
-          result.assets[0].uri,
-          [{ resize: { width: 1200 } }],
-          { compress: 0.8, format: SaveFormat.JPEG, base64: true },
-        );
-        if (manipResult.base64) {
-          processImageWithVisionAPI(manipResult.base64);
+        const asset = result.assets[0];
+        let base64 = asset.base64;
+
+        if (!base64 && asset.uri) {
+          try {
+            const manipResult = await manipulateAsync(
+              asset.uri,
+              [{ resize: { width: 1200 } }],
+              { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+            );
+            base64 = manipResult.base64;
+          } catch (mErr) {
+            console.warn("Manipulate fallback warning:", mErr);
+          }
+        }
+
+        if (base64) {
+          await processImageWithVisionAPI(base64);
+        } else {
+          Alert.alert("Xatolik", "Tanlangan rasm ma'lumotlarini yuklab bo'lmadi.");
         }
       }
     } catch (e: any) {
+      console.error("Pick image error:", e);
       Alert.alert("Xatolik", e.message || "Rasm tanlashda xatolik yuz berdi");
     }
   };
 
   const handleTakePhoto = async () => {
     try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert("Ruxsat kerak", "Kameradan foydalanish uchun ruxsat zarur.");
-        return;
+      if (Platform.OS !== "web") {
+        const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permissionResult.granted) {
+          Alert.alert("Ruxsat kerak", "Kameradan foydalanish uchun ruxsat zarur.");
+          return;
+        }
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: Platform.OS !== "web",
+        quality: 0.85,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const manipResult = await manipulateAsync(
-          result.assets[0].uri,
-          [{ resize: { width: 1200 } }],
-          { compress: 0.8, format: SaveFormat.JPEG, base64: true },
-        );
-        if (manipResult.base64) {
-          processImageWithVisionAPI(manipResult.base64);
+        const asset = result.assets[0];
+        let base64 = asset.base64;
+
+        if (!base64 && asset.uri) {
+          try {
+            const manipResult = await manipulateAsync(
+              asset.uri,
+              [{ resize: { width: 1200 } }],
+              { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+            );
+            base64 = manipResult.base64;
+          } catch (mErr) {
+            console.warn("Manipulate fallback warning:", mErr);
+          }
+        }
+
+        if (base64) {
+          await processImageWithVisionAPI(base64);
+        } else {
+          Alert.alert("Xatolik", "Kameradan olingan rasm ma'lumotlarini o'qib bo'lmadi.");
         }
       }
     } catch (e: any) {
-      Alert.alert("Xatolik", e.message || "Rasmga olishda xatolik yuz berdi");
+      console.error("Camera error:", e);
+      if (Platform.OS === "web") {
+        Alert.alert(
+          "Kamera imkoni yo'q",
+          "Brauzerda kamera ochilmadi. Galereyadan yoki kompyuterdan rasm tanlaysizmi?",
+          [
+            { text: "Bekor qilish", style: "cancel" },
+            { text: "Rasm tanlash", onPress: handlePickImage },
+          ]
+        );
+      } else {
+        Alert.alert("Xatolik", e.message || "Rasmga olishda xatolik yuz berdi");
+      }
+    }
+  };
+
+  const handleProcessManualText = () => {
+    if (!manualTextInput.trim()) {
+      Alert.alert("Bo'sh matn", "Iltimos, so'zlar ro'yxatini kiriting yoki joylashtiring.");
+      return;
+    }
+    const extractedWords = parseExtractedText(manualTextInput);
+    if (extractedWords.length > 0) {
+      setScannedWords(extractedWords);
+      setIsManualInputVisible(false);
+      setManualTextInput("");
+      setIsModalVisible(true);
+      Toast.show({
+        type: "success",
+        text1: "So'zlar ajratildi",
+        text2: `${extractedWords.length} ta so'z topildi`,
+      });
+    } else {
+      Alert.alert(
+        "So'zlar topilmadi",
+        "Kiritilgan matndan so'zlar ajratib olinmadi. Har bir so'zni yangi qatorga yozing."
+      );
     }
   };
 
@@ -564,6 +599,9 @@ export default function AddWordScreen() {
               {loadingImage ? (
                 <View style={styles.scanLoading}>
                   <ActivityIndicator size="small" color={theme.tint} />
+                  <Text style={[styles.scanLoadingText, { color: theme.tint }]}>
+                    {ocrProgressText || "Tahlil qilinmoqda..."}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.scanButtonsGroup}>
@@ -588,7 +626,19 @@ export default function AddWordScreen() {
                     activeOpacity={0.8}
                   >
                     <Ionicons name="images" size={16} color={Palette.emerald500} />
-                    <Text style={[styles.scanPillText, { color: Palette.emerald500 }]}>Rasm</Text>
+                    <Text style={[styles.scanPillText, { color: Palette.emerald500 }]}>Galereya</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.scanPillBtn,
+                      { backgroundColor: isDark ? "rgba(245,158,11,0.12)" : Palette.amber50 },
+                    ]}
+                    onPress={() => setIsManualInputVisible(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="document-text" size={16} color={Palette.amber500} />
+                    <Text style={[styles.scanPillText, { color: Palette.amber500 }]}>Matn</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -841,24 +891,49 @@ export default function AddWordScreen() {
                 ]}
               >
                 <View style={[styles.modalHeader, { borderBottomColor: theme.divider }]}>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={[styles.modalTitle, { color: theme.text }]}>
                       Topilgan so'zlar
                     </Text>
                     <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
-                      {scannedWords.filter((w) => w.selected).length} ta so'z tanlandi
+                      {scannedWords.filter((w) => w.selected).length} / {scannedWords.length} ta so'z tanlandi
                     </Text>
                   </View>
 
-                  <TouchableOpacity
-                    onPress={() => setIsModalVisible(false)}
-                    style={[
-                      styles.modalCloseBtn,
-                      { backgroundColor: isDark ? "rgba(244,63,94,0.1)" : Palette.rose50 },
-                    ]}
-                  >
-                    <Ionicons name="close" size={20} color={Palette.rose500} />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const allSelected = scannedWords.every((w) => w.selected);
+                        setScannedWords((prev) =>
+                          prev.map((w) => ({ ...w, selected: !allSelected }))
+                        );
+                      }}
+                      style={[
+                        styles.toggleSelectBtn,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(99,102,241,0.15)"
+                            : Palette.indigo50,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.toggleSelectBtnText, { color: theme.tint }]}>
+                        {scannedWords.every((w) => w.selected)
+                          ? "Bekor qilish"
+                          : "Barchasi"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => setIsModalVisible(false)}
+                      style={[
+                        styles.modalCloseBtn,
+                        { backgroundColor: isDark ? "rgba(244,63,94,0.1)" : Palette.rose50 },
+                      ]}
+                    >
+                      <Ionicons name="close" size={20} color={Palette.rose500} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <FlatList
@@ -980,14 +1055,20 @@ export default function AddWordScreen() {
                         <View style={styles.scannedWordContent}>
                           <Text style={[styles.scannedWordTitle, { color: theme.text }]}>
                             {item.word}
+                            {item.pronunciation ? `  [${item.pronunciation}]` : ""}
                           </Text>
                           <Text
                             style={[
                               styles.scannedWordTranslation,
-                              { color: theme.textSecondary },
+                              {
+                                color: item.translation
+                                  ? theme.textSecondary
+                                  : Palette.amber500,
+                                fontStyle: item.translation ? "normal" : "italic",
+                              },
                             ]}
                           >
-                            {item.translation}
+                            {item.translation || "Tarjima kiritilmagan (tahrirlash uchun qalamchani bosing)"}
                           </Text>
                         </View>
                       </View>
@@ -1013,6 +1094,108 @@ export default function AddWordScreen() {
                     <Text style={styles.saveButtonText}>
                       Lug'atga qo'shish ({scannedWords.filter((w) => w.selected).length})
                     </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* ── MANUAL TEXT INPUT MODAL ── */}
+          <Modal
+            visible={isManualInputVisible}
+            animationType="slide"
+            transparent={Platform.OS === "web"}
+            onRequestClose={() => setIsManualInputVisible(false)}
+          >
+            <View
+              style={
+                Platform.OS === "web"
+                  ? {
+                      flex: 1,
+                      backgroundColor: "rgba(0,0,0,0.5)",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      padding: 16,
+                    }
+                  : { flex: 1, backgroundColor: theme.background }
+              }
+            >
+              <View
+                style={[
+                  styles.modalContainer,
+                  { backgroundColor: theme.background },
+                  Platform.OS === "web" && {
+                    width: "100%",
+                    maxWidth: 580,
+                    maxHeight: "88%",
+                    borderRadius: UI.borderRadius.xl,
+                    overflow: "hidden",
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <View style={[styles.modalHeader, { borderBottomColor: theme.divider }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modalTitle, { color: theme.text }]}>
+                      Matn orqali qo'shish
+                    </Text>
+                    <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                      So'zlar ro'yxatini yozing yoki nusxalab joylashtiring
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setIsManualInputVisible(false)}
+                    style={[
+                      styles.modalCloseBtn,
+                      { backgroundColor: isDark ? "rgba(244,63,94,0.1)" : Palette.rose50 },
+                    ]}
+                  >
+                    <Ionicons name="close" size={20} color={Palette.rose500} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flex: 1, padding: 16 }}>
+                  <TextInput
+                    style={[
+                      styles.modalInput,
+                      {
+                        flex: 1,
+                        height: undefined,
+                        minHeight: 200,
+                        textAlignVertical: "top",
+                        backgroundColor: theme.inputBackground,
+                        color: theme.text,
+                        borderColor: theme.inputBorder,
+                        padding: 14,
+                        lineHeight: 22,
+                      },
+                    ]}
+                    multiline
+                    value={manualTextInput}
+                    onChangeText={setManualTextInput}
+                    placeholder={"Format namunalari:\napple - olma\nbook - kitob\nschool : maktab\ncomputer kompyuter"}
+                    placeholderTextColor={theme.muted}
+                  />
+                </View>
+
+                <View
+                  style={[
+                    styles.modalFooter,
+                    {
+                      borderTopColor: theme.divider,
+                      backgroundColor: theme.card,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.tint, width: "100%" }]}
+                    onPress={handleProcessManualText}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="sparkles" size={20} color="#fff" />
+                    <Text style={styles.saveButtonText}>So'zlarni ajratib olish</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1162,7 +1345,14 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   scanLoading: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  scanLoadingText: {
+    ...Typography.caption,
+    fontWeight: "600",
   },
   scanButtonsGroup: {
     flexDirection: "row",
@@ -1269,6 +1459,15 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     ...Typography.bodySmall,
     marginTop: 2,
+  },
+  toggleSelectBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: UI.borderRadius.pill,
+  },
+  toggleSelectBtnText: {
+    ...Typography.caption,
+    fontWeight: "700",
   },
   modalCloseBtn: {
     width: 36,
