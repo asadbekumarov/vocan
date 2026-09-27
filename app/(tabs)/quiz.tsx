@@ -38,6 +38,9 @@ const QUIZ_MODES: { id: QuizMode; from: string; to: string }[] = [
   { id: "ru-en", from: "RU", to: "EN" },
 ];
 
+// Ovoz bilan javob berish funksiyasi (vaqtincha to'xtatildi, keyinroq davom ettiriladi)
+const ENABLE_SPEECH_RECOGNITION = false;
+
 export default function QuizScreen() {
   const { t } = useLanguage();
   const { theme, isDark } = useTheme();
@@ -61,19 +64,26 @@ export default function QuizScreen() {
 
   const timerRef = useRef<any>(null);
 
-  useSpeechRecEventSafe("start", () => setIsListening(true));
-  useSpeechRecEventSafe("end", () => setIsListening(false));
+  useSpeechRecEventSafe("start", () => {
+    if (ENABLE_SPEECH_RECOGNITION) setIsListening(true);
+  });
+  useSpeechRecEventSafe("end", () => {
+    if (ENABLE_SPEECH_RECOGNITION) setIsListening(false);
+  });
   useSpeechRecEventSafe("result", (event: any) => {
-    if (event.results && event.results.length > 0) {
+    if (ENABLE_SPEECH_RECOGNITION && event.results && event.results.length > 0) {
       setUserInput(event.results[0]?.transcript);
     }
   });
   useSpeechRecEventSafe("error", (event: any) => {
-    console.log("Speech recognition error:", event.error, event.message);
-    setIsListening(false);
+    if (ENABLE_SPEECH_RECOGNITION) {
+      console.log("Speech recognition error:", event.error, event.message);
+      setIsListening(false);
+    }
   });
 
   const startListening = async () => {
+    if (!ENABLE_SPEECH_RECOGNITION) return;
     if (isExpoGo) {
       Toast.show({
         type: "error",
@@ -107,6 +117,7 @@ export default function QuizScreen() {
   };
 
   const stopListening = async () => {
+    if (!ENABLE_SPEECH_RECOGNITION) return;
     try {
       await SpeechRecModule?.stop();
     } catch (e) {
@@ -117,12 +128,14 @@ export default function QuizScreen() {
   const handleConfirm = () => {
     if (isConfirmed) return;
     const currentQuiz = sessionQuestions[currentIndex];
-    const isInputType = currentQuiz.type === "input" || currentQuiz.type === "speech";
+    const isInputType =
+      currentQuiz.type === "input" ||
+      (ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech");
 
     if (!isInputType && !selectedOption) return;
     if (isInputType && !userInput.trim()) return;
 
-    if (currentQuiz.type === "speech" && isListening) {
+    if (ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech" && isListening) {
       stopListening();
     }
 
@@ -165,21 +178,18 @@ export default function QuizScreen() {
 
     if (modeWords.length >= 4) {
       const today = new Date().toISOString().split("T")[0];
-      const dueWords = modeWords.filter(w => !w.nextReviewDate || w.nextReviewDate <= today);
-      const nonDueWords = modeWords.filter(w => w.nextReviewDate && w.nextReviewDate > today).sort(() => Math.random() - 0.5);
+      const dueWords = modeWords
+        .filter((w) => !w.nextReviewDate || w.nextReviewDate <= today)
+        .sort(() => Math.random() - 0.5);
+      const nonDueWords = modeWords
+        .filter((w) => w.nextReviewDate && w.nextReviewDate > today)
+        .sort(() => Math.random() - 0.5);
 
-      let targetWords = [];
-      if (dueWords.length >= 10) {
-        targetWords = dueWords.sort(() => Math.random() - 0.5).slice(0, 10);
-      } else {
-        targetWords = [...dueWords, ...nonDueWords.slice(0, 10 - dueWords.length)];
-      }
-
-      const questionsCount = Math.min(10, targetWords.length);
-      const shuffledQuestions = targetWords.slice(0, questionsCount).sort(() => Math.random() - 0.5);
+      // Chegara yo'q - barcha so'zlar testga kiritiladi (avval takrorlanishi kerak bo'lganlar, so'ng qolganlari)
+      const shuffledQuestions = [...dueWords, ...nonDueWords];
       
       const allowedTypes = ["multiple", "input"];
-      if (!isExpoGo) {
+      if (ENABLE_SPEECH_RECOGNITION && !isExpoGo) {
         allowedTypes.push("speech");
       }
 
@@ -503,7 +513,7 @@ export default function QuizScreen() {
                       onSubmitEditing={handleConfirm}
                     />
                   </MotiView>
-                ) : currentQuiz.type === "speech" ? (
+                ) : ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech" ? (
                   <View style={styles.voiceArea}>
                     <MotiView
                       animate={{
@@ -570,7 +580,7 @@ export default function QuizScreen() {
                 )}
 
                 <View style={styles.footer}>
-                  {(selectedOption || ((currentQuiz.type === "input" || currentQuiz.type === "speech") && userInput.trim())) && !isConfirmed && (
+                  {(selectedOption || ((currentQuiz.type === "input" || (ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech")) && userInput.trim())) && !isConfirmed && (
                     <MotiView
                       from={{ opacity: 0, translateY: 10 }}
                       animate={{ opacity: 1, translateY: 0 }}

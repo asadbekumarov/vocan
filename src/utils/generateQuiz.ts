@@ -6,7 +6,7 @@ export const generateQuiz = (
   words: Word[],
   mode: QuizMode = "uz-en",
   correctWord?: Word,
-  allowedTypes: string[] = ["multiple", "input", "speech"]
+  allowedTypes: string[] = ["multiple", "input"]
 ) => {
   if (words.length < 4) return null;
 
