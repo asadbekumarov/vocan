@@ -8,7 +8,7 @@ type ThemeMode = 'light' | 'dark' | 'system';
 interface ThemeContextType {
     mode: ThemeMode;
     setMode: (mode: ThemeMode) => Promise<void>;
-    theme: typeof Colors.light;
+    theme: typeof Colors.light | typeof Colors.dark;
     isDark: boolean;
 }
 

@@ -1,5 +1,4 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { UI } from "@/constants/theme";
+import { Palette, Shadows, UI, Typography, ComponentTokens } from "@/constants/theme";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/context/ThemeContext";
 import {
@@ -9,11 +8,11 @@ import {
 } from "@/storage/wordStorage";
 import { Word } from "@/types/Word";
 import { MotiView } from "@/utils/moti-wrapper";
-import { AntDesign, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useLocalSearchParams, router } from "expo-router";
+import { useEffect, useState, useRef } from "react";
 import {
   Platform,
   ActivityIndicator,
@@ -28,23 +27,31 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions
+  useWindowDimensions,
 } from "react-native";
 import Toast from "react-native-toast-message";
 
-type Step = "selection" | "form";
 type Mode = "uz-en" | "en-uz" | "uz-ru" | "ru-uz" | "en-ru" | "ru-en";
 
 const OCR_API_KEY = "helloworld"; // TODO: .env fayliga ko'chiring: EXPO_PUBLIC_OCR_API_KEY
 
-const MODES: { id: Mode; from: string; to: string }[] = [
-  { id: "uz-en", from: "UZ", to: "EN" },
-  { id: "uz-ru", from: "UZ", to: "RU" },
-  { id: "en-uz", from: "EN", to: "UZ" },
-  { id: "en-ru", from: "EN", to: "RU" },
-  { id: "ru-uz", from: "RU", to: "UZ" },
-  { id: "ru-en", from: "RU", to: "EN" },
+const MODES: { id: Mode; from: string; to: string; label: string; color: string }[] = [
+  { id: "uz-en", from: "UZ", to: "EN", label: "UZ → EN", color: Palette.emerald500 },
+  { id: "en-uz", from: "EN", to: "UZ", label: "EN → UZ", color: "#3B82F6" },
+  { id: "uz-ru", from: "UZ", to: "RU", label: "UZ → RU", color: Palette.amber500 },
+  { id: "ru-uz", from: "RU", to: "UZ", label: "RU → UZ", color: "#8B5CF6" },
+  { id: "en-ru", from: "EN", to: "RU", label: "EN → RU", color: "#EC4899" },
+  { id: "ru-en", from: "RU", to: "EN", label: "RU → EN", color: "#14B8A6" },
 ];
+
+const REVERSE_MODES: Record<Mode, Mode> = {
+  "uz-en": "en-uz",
+  "en-uz": "uz-en",
+  "uz-ru": "ru-uz",
+  "ru-uz": "uz-ru",
+  "en-ru": "ru-en",
+  "ru-en": "en-ru",
+};
 
 interface ScannedWord {
   id: string;
@@ -56,34 +63,26 @@ interface ScannedWord {
 
 export default function AddWordScreen() {
   const { width } = useWindowDimensions();
-  const numColumns = width > 768 ? 3 : width > 350 ? 2 : 1;
-  const availableWidth = width > 900 ? 900 - (UI.padding * 2) : width - (UI.padding * 2);
-  const cardWidth = (availableWidth - (16 * (numColumns - 1))) / numColumns;
-
   const params = useLocalSearchParams();
   const { t } = useLanguage();
   const { theme, isDark } = useTheme();
-  const [step, setStep] = useState<Step>("selection");
+
   const [mode, setMode] = useState<Mode>("uz-en");
   const [uz, setUz] = useState("");
   const [en, setEn] = useState("");
   const [ru, setRu] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
-  const [errors, setErrors] = useState<{uz?: boolean, en?: boolean, ru?: boolean}>({});
-  const [, setImageUri] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ uz?: boolean; en?: boolean; ru?: boolean }>({});
+  const [focusedField, setFocusedField] = useState<"uz" | "en" | "ru" | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
   const [scannedWords, setScannedWords] = useState<ScannedWord[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   // Edit state for scanned words
-  const [editingScannedWordId, setEditingScannedWordId] = useState<
-    string | null
-  >(null);
+  const [editingScannedWordId, setEditingScannedWordId] = useState<string | null>(null);
   const [editScannedWordText, setEditScannedWordText] = useState("");
-  const [editScannedPronunciationText, setEditScannedPronunciationText] =
-    useState("");
-  const [editScannedTranslationText, setEditScannedTranslationText] =
-    useState("");
+  const [editScannedPronunciationText, setEditScannedPronunciationText] = useState("");
+  const [editScannedTranslationText, setEditScannedTranslationText] = useState("");
 
   useEffect(() => {
     if (params.id && params.id !== editId) {
@@ -91,10 +90,28 @@ export default function AddWordScreen() {
       setUz((params.uz as string) || "");
       setEn((params.en as string) || "");
       setRu((params.ru as string) || "");
-      setMode(params.mode as Mode);
-      setStep("form");
+      if (params.mode) {
+        setMode(params.mode as Mode);
+      }
     }
   }, [params.id, params.uz, params.en, params.ru, params.mode, editId]);
+
+  const handleSwapLanguages = () => {
+    const targetMode = REVERSE_MODES[mode];
+    if (targetMode) {
+      setMode(targetMode);
+    }
+  };
+
+  const handleClearForm = () => {
+    setUz("");
+    setEn("");
+    setRu("");
+    setErrors({});
+    if (editId) {
+      setEditId(null);
+    }
+  };
 
   const handleSave = async () => {
     Keyboard.dismiss();
@@ -103,26 +120,26 @@ export default function AddWordScreen() {
     const needsRu = mode.includes("ru");
 
     const newErrors = {
-      uz: needsUz && !uz,
-      en: needsEn && !en,
-      ru: needsRu && !ru,
+      uz: needsUz && !uz.trim(),
+      en: needsEn && !en.trim(),
+      ru: needsRu && !ru.trim(),
     };
     setErrors(newErrors);
 
     if (newErrors.uz || newErrors.en || newErrors.ru) {
       Toast.show({
         type: "error",
-        text1: t("error"),
-        text2: t("fillRequired"),
+        text1: t("error") || "Xatolik",
+        text2: t("fillRequired") || "Barcha maydonlarni to'ldiring",
       });
       return;
     }
 
     const wordData = {
       id: editId || Date.now().toString(),
-      uz: needsUz ? uz : "",
-      en: needsEn ? en : "",
-      ru: needsRu ? ru : "",
+      uz: needsUz ? uz.trim() : "",
+      en: needsEn ? en.trim() : "",
+      ru: needsRu ? ru.trim() : "",
       date: new Date().toISOString().split("T")[0],
       mode,
     };
@@ -131,46 +148,22 @@ export default function AddWordScreen() {
       await updateWord(wordData);
       Toast.show({
         type: "success",
-        text1: t("success"),
-        text2: t("wordUpdated"),
+        text1: t("success") || "Muvaffaqiyatli",
+        text2: t("wordUpdated") || "So'z yangilandi",
       });
-      setUz("");
-      setEn("");
-      setRu("");
-      setEditId(null);
-      setStep("selection");
+      handleClearForm();
+      router.push("/(tabs)/my-words");
     } else {
       await addWord(wordData);
       Toast.show({
         type: "success",
-        text1: t("success"),
-        text2: t("wordSaved"),
+        text1: t("success") || "Muvaffaqiyatli",
+        text2: t("wordSaved") || "So'z saqlandi",
       });
       setUz("");
       setEn("");
       setRu("");
     }
-  };
-
-  const selectMode = (selectedMode: Mode) => {
-    setMode(selectedMode);
-    setStep("form");
-    setErrors({});
-    if (!editId) {
-      setUz("");
-      setEn("");
-      setRu("");
-    }
-  };
-
-  const handleBack = () => {
-    setStep("selection");
-    setEditId(null);
-    setUz("");
-    setEn("");
-    setRu("");
-    setErrors({});
-    setImageUri(null);
   };
 
   const processImageWithVisionAPI = async (base64Image: string) => {
@@ -201,92 +194,60 @@ export default function AddWordScreen() {
         throw new Error(errorMessage);
       }
 
-      let fullText = "";
-      if (result.ParsedResults && result.ParsedResults.length > 0) {
-        fullText = result.ParsedResults[0].ParsedText;
-      } else {
-        throw new Error("Matnni aniqlab bo'lmadi");
-      }
+      if (
+        result.ParsedResults &&
+        result.ParsedResults.length > 0 &&
+        result.ParsedResults[0].ParsedText
+      ) {
+        const fullText = result.ParsedResults[0].ParsedText;
+        const lines = fullText.split(/\r?\n/).filter((line: string) => line.trim().length > 0);
 
-      // Regex logic format: 
-      // 1. "354. Rough (raf) - qo'pol"
-      // 2. "Rough - qo'pol"
-      // 3. "A bit\tBiroz" (Table format)
-      // We look for dashes, equals, colons, or tabs as separators.
-      const regex = /^\d*\.?\s*([a-zA-Z'\- ]+?)(?:\s*\(([^)]+)\))?\s*(?:[-–—=:\t]|\s{2,})\s*(.+)$/;
+        const extractedWords: ScannedWord[] = [];
 
-      const extractedWords: ScannedWord[] = [];
-      const lines = fullText.split(/\r?\n/);
+        lines.forEach((line: string, index: number) => {
+          let word = "";
+          let pronunciation = "";
+          let translation = "";
 
-      for (const line of lines) {
-        const cleanLine = line.trim();
-        if (!cleanLine) continue;
+          const parts = line.split(/[-–—:]+/);
 
-        let match = cleanLine.match(regex);
-        let word = "";
-        let translation = "";
-        let pronunciation = undefined;
-        
-        if (match) {
-          word = match[1].trim();
-          pronunciation = match[2] ? match[2].trim() : undefined;
-          translation = match[3].trim();
-        } else {
-          // Fallback parsing for lines that didn't match the standard delimiters
-          if (cleanLine.length > 3 && cleanLine.includes(" ")) {
-            // Check if there's a big gap (more than 1 space)
-            const gapMatch = cleanLine.match(/^(.*?)\s{2,}(.*)$/);
-            if (gapMatch) {
-                word = gapMatch[1].trim();
-                translation = gapMatch[2].trim();
-            } else {
-                // No big gap. Just words separated by a single space.
-                // We assume the last word is the translation and everything before is the word.
-                // e.g., "A little bit Birozgina" -> word="A little bit", trans="Birozgina"
-                const parts = cleanLine.split(" ");
-                if (parts.length >= 2) {
-                   translation = parts.pop() || "";
-                   word = parts.join(" ");
-                }
+          if (parts.length >= 2) {
+            word = parts[0].trim();
+            translation = parts.slice(1).join(" ").trim();
+
+            const pronMatch = word.match(/\[(.*?)\]|\/(.*?)\//);
+            if (pronMatch) {
+              pronunciation = pronMatch[1] || pronMatch[2];
+              word = word.replace(/\[(.*?)\]|\/(.*?)\//, "").trim();
+            }
+
+            if (word && translation) {
+              extractedWords.push({
+                id: `${Date.now()}_${index}`,
+                word,
+                pronunciation,
+                translation,
+                selected: true,
+              });
             }
           }
+        });
+
+        if (extractedWords.length > 0) {
+          setScannedWords(extractedWords);
+          setIsModalVisible(true);
+        } else {
+          Alert.alert(
+            "So'zlar topilmadi",
+            "Rasmdan so'z va tarjima formatidagi matn ajratib olinmadi (Format: word - translation).",
+          );
         }
-
-        if (word && translation) {
-          // Filter out table headers
-          if (word.toLowerCase() === 'english' || translation.toLowerCase() === 'uzbek' || translation.toLowerCase() === 'russian') {
-             continue;
-          }
-          
-          // Clean up numbering (e.g. "1. Word" or "1) Word")
-          word = word.replace(/^\d+[\.\)]\s*/, '');
-
-          extractedWords.push({
-            id: Date.now().toString() + Math.random().toString(),
-            word,
-            pronunciation,
-            translation,
-            selected: true,
-          });
-        }
-      }
-
-      setScannedWords(extractedWords);
-
-      if (extractedWords.length > 0) {
-        setIsModalVisible(true);
       } else {
-        Alert.alert(
-          "Ma'lumot topilmadi",
-          "Rasmdan mos formatdagi so'zlar aniqlanmadi.",
-        );
+        Alert.alert("Xatolik", "Rasmdan hech qanday matn o'qib bo'lmadi.");
       }
     } catch (error: any) {
-      console.error("OCR API error:", error);
-      Alert.alert(
-        t("error") || "Xatolik",
-        `Rasm o'qishda xatolik yuz berdi: ${error?.message || JSON.stringify(error)}`,
-      );
+      console.error("OCR Error:", error);
+      Alert.alert("Xatolik yuz berdi", error.message || "Rasm tahlilida xatolik");
     } finally {
       setLoadingImage(false);
     }
@@ -294,99 +255,58 @@ export default function AddWordScreen() {
 
   const handlePickImage = async () => {
     try {
-      setLoadingImage(true);
-      const permissionResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permissionResult.granted === false) {
-        Alert.alert(
-          t("error") || "Xatolik",
-          "Galereyaga kirish uchun ruxsat kerak!",
-        );
-        setLoadingImage(false);
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Ruxsat kerak", "Galereyaga kirish uchun ruxsat berishingiz zarur.");
         return;
       }
 
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 1,
-      } as any;
-      (pickerOptions as any).usePicker = true;
-      (pickerOptions as any).legacy = true;
-      const result = await ImagePicker.launchImageLibraryAsync(
-        pickerOptions as any,
-      );
+        quality: 0.8,
+      });
 
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        console.log("Tanlangan rasm URI:", uri);
-        setImageUri(uri);
-
-        // Resize and compress image
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const manipResult = await manipulateAsync(
-          uri,
-          [{ resize: { width: 1000 } }],
-          { compress: 0.7, format: SaveFormat.JPEG, base64: true },
+          result.assets[0].uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.8, format: SaveFormat.JPEG, base64: true },
         );
-
         if (manipResult.base64) {
-          await processImageWithVisionAPI(manipResult.base64);
+          processImageWithVisionAPI(manipResult.base64);
         }
       }
-    } catch (error: any) {
-      console.error("Rasm tanlashda xatolik:", error);
-      Alert.alert(
-        t("error") || "Xatolik",
-        `Rasm tanlashda xatolik yuz berdi: ${error?.message || JSON.stringify(error)}`,
-      );
-    } finally {
-      setLoadingImage(false);
+    } catch (e: any) {
+      Alert.alert("Xatolik", e.message || "Rasm tanlashda xatolik yuz berdi");
     }
   };
 
   const handleTakePhoto = async () => {
     try {
-      setLoadingImage(true);
-      const permissionResult =
-        await ImagePicker.requestCameraPermissionsAsync();
-      if (permissionResult.granted === false) {
-        Alert.alert(
-          t("error") || "Xatolik",
-          "Kameraga kirish uchun ruxsat kerak!",
-        );
-        setLoadingImage(false);
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Ruxsat kerak", "Kameradan foydalanish uchun ruxsat zarur.");
         return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
-        quality: 1,
+        quality: 0.8,
       });
 
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        console.log("Olingan rasm URI:", uri);
-        setImageUri(uri);
-
-        // Resize and compress image
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const manipResult = await manipulateAsync(
-          uri,
-          [{ resize: { width: 1000 } }],
-          { compress: 0.7, format: SaveFormat.JPEG, base64: true },
+          result.assets[0].uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.8, format: SaveFormat.JPEG, base64: true },
         );
-
         if (manipResult.base64) {
-          await processImageWithVisionAPI(manipResult.base64);
+          processImageWithVisionAPI(manipResult.base64);
         }
       }
-    } catch (error: any) {
-      console.error("Rasm olishda xatolik:", error);
-      Alert.alert(
-        t("error") || "Xatolik",
-        `Rasm olishda xatolik yuz berdi: ${error?.message || JSON.stringify(error)}`,
-      );
-    } finally {
-      setLoadingImage(false);
+    } catch (e: any) {
+      Alert.alert("Xatolik", e.message || "Rasmga olishda xatolik yuz berdi");
     }
   };
 
@@ -415,10 +335,7 @@ export default function AddWordScreen() {
 
   const saveEditedScannedWord = () => {
     if (!editScannedWordText || !editScannedTranslationText) {
-      Alert.alert(
-        t("error") || "Xatolik",
-        "So'z va tarjima bo'sh bo'lishi mumkin emas!",
-      );
+      Alert.alert(t("error") || "Xatolik", "So'z va tarjima bo'sh bo'lishi mumkin emas!");
       return;
     }
 
@@ -435,22 +352,13 @@ export default function AddWordScreen() {
         return w;
       }),
     );
-
-    setEditingScannedWordId(null);
-  };
-
-  const cancelEditingScannedWord = () => {
     setEditingScannedWordId(null);
   };
 
   const saveSelectedWords = async () => {
     const selectedWordsToSave = scannedWords.filter((w) => w.selected);
-
     if (selectedWordsToSave.length === 0) {
-      Alert.alert(
-        t("error") || "Xatolik",
-        "Saqlash uchun hech qanday so'z tanlanmagan.",
-      );
+      Alert.alert(t("error") || "Xatolik", "Saqlash uchun kamida bitta so'z tanlang.");
       return;
     }
 
@@ -460,7 +368,7 @@ export default function AddWordScreen() {
       const needsRu = mode.includes("ru");
 
       const wordsToAdd: Word[] = selectedWordsToSave.map((scanned) => {
-        const wordData: Word = {
+        return {
           id: Date.now().toString() + Math.random().toString(),
           uz: needsUz
             ? mode.startsWith("uz")
@@ -484,447 +392,635 @@ export default function AddWordScreen() {
           date: new Date().toISOString().split("T")[0],
           mode,
         };
-
-        return wordData;
       });
 
       await addMultipleWords(wordsToAdd);
-
       setIsModalVisible(false);
       setScannedWords([]);
 
       Toast.show({
         type: "success",
-        text1: t("success"),
-        text2: `${selectedWordsToSave.length} ${t("wordsAddedCount")}`,
+        text1: t("success") || "Muvaffaqiyatli",
+        text2: `${selectedWordsToSave.length} ${t("wordsAddedCount") || "ta so'z qo'shildi"}`,
       });
     } catch (error) {
       console.error("Error saving scanned words:", error);
-      Alert.alert(
-        t("error") || "Xatolik",
-        "So'zlarni saqlashda xatolik yuz berdi",
-      );
+      Alert.alert(t("error") || "Xatolik", "So'zlarni saqlashda xatolik yuz berdi");
     }
   };
-
-  const renderScannedWordItem = ({ item }: { item: ScannedWord }) => {
-    const isEditing = editingScannedWordId === item.id;
-
-    if (isEditing) {
-      return (
-        <View
-          style={[
-            styles.scannedWordCard,
-            {
-              backgroundColor: isDark ? "#2A2C2E" : "#FFF",
-              borderColor: isDark ? "#3A3C3E" : "#e5e7eb",
-            },
-          ]}
-        >
-          <TextInput
-            style={[
-              styles.modalInput,
-              {
-                backgroundColor: isDark ? "#111827" : "#f9fafb",
-                color: theme.text,
-                borderColor: isDark ? "#3A3C3E" : "#e5e7eb",
-              },
-            ]}
-            value={editScannedWordText}
-            onChangeText={setEditScannedWordText}
-            placeholder={"So'z"}
-            placeholderTextColor={isDark ? "#888" : "#999"}
-          />
-          <TextInput
-            style={[
-              styles.modalInput,
-              {
-                backgroundColor: isDark ? "#111827" : "#f9fafb",
-                color: theme.text,
-                borderColor: isDark ? "#3A3C3E" : "#e5e7eb",
-              },
-            ]}
-            value={editScannedPronunciationText}
-            onChangeText={setEditScannedPronunciationText}
-            placeholder="Talaffuzi (ixtiyoriy)"
-            placeholderTextColor={isDark ? "#888" : "#999"}
-          />
-          <TextInput
-            style={[
-              styles.modalInput,
-              {
-                backgroundColor: isDark ? "#111827" : "#f9fafb",
-                color: theme.text,
-                borderColor: isDark ? "#3A3C3E" : "#e5e7eb",
-              },
-            ]}
-            value={editScannedTranslationText}
-            onChangeText={setEditScannedTranslationText}
-            placeholder={"Tarjimasi"}
-            placeholderTextColor={isDark ? "#888" : "#999"}
-          />
-          <View style={styles.modalEditButtonsRow}>
-            <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: "#ef4444" }]}
-              onPress={cancelEditingScannedWord}
-            >
-              <Text style={styles.modalBtnText}>{t("cancel")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.modalBtn,
-                { backgroundColor: "#10b981", marginLeft: 10 },
-              ]}
-              onPress={saveEditedScannedWord}
-            >
-              <Text style={styles.modalBtnText}>{t("save")}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={[
-          styles.scannedWordCard,
-          {
-            backgroundColor: isDark ? "#111827" : "#FFF",
-            borderColor: isDark ? "#2A2C2E" : "#e5e7eb",
-          },
-          !item.selected && { opacity: 0.6 },
-        ]}
-      >
-        <View style={styles.scannedWordCardHeader}>
-          <View style={styles.switchContainer}>
-            <Switch
-              value={item.selected}
-              onValueChange={() => toggleScannedWordSelection(item.id)}
-              trackColor={{ false: "#767577", true: theme.tint }}
-              thumbColor={item.selected ? "#fff" : "#f4f3f4"}
-            />
-          </View>
-          <View style={styles.scannedWordActions}>
-            <TouchableOpacity
-              onPress={() => startEditingScannedWord(item)}
-              style={styles.actionBtn}
-            >
-              <AntDesign name="edit" size={20} color={theme.tint} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => deleteScannedWord(item.id)}
-              style={[styles.actionBtn, { marginRight: 0 }]}
-            >
-              <AntDesign name="delete" size={20} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.scannedWordContent}>
-          <Text style={[styles.scannedWordTitle, { color: theme.text }]}>
-            {item.word}{" "}
-            {item.pronunciation ? (
-              <Text style={{ color: "#8b5cf6" }}>({item.pronunciation})</Text>
-            ) : (
-              ""
-            )}
-          </Text>
-          <Text style={[styles.scannedWordTranslation, { color: theme.text }]}>
-            {item.translation}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  if (step === "selection") {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ScrollView
-          style={{ flex: 1, width: '100%' }}
-          contentContainerStyle={[styles.contentWrapper, { paddingBottom: Platform.OS === "web" ? 120 : 40, alignItems: 'center' }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <MotiView
-            from={{ opacity: 0, translateY: -10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 250 }}
-            style={{ marginBottom: UI.spacing.xl, width: "100%" }}
-          >
-            <Text style={[styles.title, { color: theme.text }]}>
-              {t("selectPair")}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.text, opacity: 0.7 }]}>
-              {t("selectLanguage")}
-            </Text>
-          </MotiView>
-
-          <View style={styles.grid}>
-            {MODES.map((m, index) => (
-              <MotiView
-                key={m.id}
-                from={{ opacity: 0, scale: 0.9, translateY: 15 }}
-                animate={{ opacity: 1, scale: 1, translateY: 0 }}
-                transition={{ type: "timing", duration: 200, delay: index * 60 }}
-                style={[styles.cardWrapper, { width: cardWidth }]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor: theme.card,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                  onPress={() => selectMode(m.id)}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.cardIconContainer,
-                      { backgroundColor: theme.secondary },
-                    ]}
-                  >
-                    <IconSymbol name="language" size={32} color={theme.tint} />
-                  </View>
-                  <View style={styles.cardLabelContainer}>
-                    <Text style={[styles.cardLabel, { color: theme.text }]}>
-                      {m.from}
-                    </Text>
-                    <IconSymbol name="arrow.right" size={14} color={theme.tint} />
-                    <Text style={[styles.cardLabel, { color: theme.text }]}>
-                      {m.to}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </MotiView>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
 
   const showUz = mode.includes("uz");
   const showEn = mode.includes("en");
   const showRu = mode.includes("ru");
+  const currentModeData = MODES.find((m) => m.id === mode) || MODES[0];
+  const currentColor = currentModeData.color;
 
   return (
-    <ScrollView
-      style={[styles.scrollContainer, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.contentWrapper}>
-        <MotiView
-          from={{ opacity: 0, translateX: -20 }}
-          animate={{ opacity: 1, translateX: 0 }}
-          transition={{ type: "timing", duration: 200 }}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={22} color={theme.tint} />
-          </TouchableOpacity>
-        </MotiView>
+          {/* ── HEADER WITH BACK / CANCEL IF EDITING ── */}
+          <MotiView
+            from={{ opacity: 0, translateY: -12 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: "timing", duration: 350 }}
+            style={styles.header}
+          >
+            <View style={{ flex: 1 }}>
+              <View style={styles.titleRow}>
+                <Text style={[styles.screenTitle, { color: theme.text }]}>
+                  {editId ? t("editWord") || "Tahrirlash" : t("addWord") || "So'z qo'shish"}
+                </Text>
+                {editId && (
+                  <View style={[styles.editingBadge, { backgroundColor: Palette.indigo500 + "18" }]}>
+                    <Text style={[styles.editingBadgeText, { color: theme.tint }]}>Edit Mode</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.screenSubtitle, { color: theme.textSecondary }]}>
+                {editId ? t("updateWord") || "So'zni yangilang" : t("enterTranslation") || "Yangi lug'at boyligingizni boyiting"}
+              </Text>
+            </View>
 
-        <MotiView
-          from={{ opacity: 0, translateY: -10 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 250 }}
-        >
-          <Text style={[styles.title, { color: theme.text }]}>
-            {editId ? t("editWord") : t("newWord")}
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.text, opacity: 0.7 }]}>
-            {editId
-              ? t("updateWord")
-              : `${t("enterTranslation")} (${mode.toUpperCase()})`}
-          </Text>
-        </MotiView>
+            {editId && (
+              <TouchableOpacity
+                style={[
+                  styles.cancelEditBtn,
+                  { backgroundColor: isDark ? "rgba(244,63,94,0.12)" : Palette.rose50 },
+                ]}
+                onPress={handleClearForm}
+              >
+                <Ionicons name="close" size={18} color={Palette.rose500} />
+              </TouchableOpacity>
+            )}
+          </MotiView>
 
-        <Modal
-          visible={isModalVisible}
-          animationType="slide"
-          transparent={Platform.OS === "web"}
-          presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
-          onRequestClose={() => setIsModalVisible(false)}
-        >
-          <View style={Platform.OS === "web" ? { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 } : { flex: 1 }}>
-            <View
-              style={[
-                styles.modalContainer, 
-                { backgroundColor: theme.background },
-                Platform.OS === "web" && { width: "100%", maxWidth: 600, maxHeight: "90%", borderRadius: 16, overflow: "hidden" }
-              ]}
-            >
-            <View
-              style={[
-                styles.modalHeader,
-                { borderBottomColor: theme.border },
-              ]}
-            >
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {`${t("foundWords")} (${scannedWords.filter((w) => w.selected).length})`}
+          {/* ── INTERACTIVE LANGUAGE PAIR SELECTOR STRIP ── */}
+          <View style={styles.pairSelectorWrapper}>
+            <View style={styles.pairSelectorHeader}>
+              <Text style={[styles.sectionCaption, { color: theme.textSecondary }]}>
+                {t("selectPair") || "Til juftligini tanlang"}
               </Text>
               <TouchableOpacity
-                onPress={() => setIsModalVisible(false)}
-                style={styles.modalCloseBtn}
+                onPress={handleSwapLanguages}
+                style={[
+                  styles.swapButton,
+                  { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : Palette.slate100 },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <AntDesign name="close" size={24} color={theme.text} />
+                <Ionicons name="swap-horizontal" size={16} color={currentColor} />
+                <Text style={[styles.swapButtonText, { color: currentColor }]}>Almashtirish</Text>
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={scannedWords}
-              keyExtractor={(item) => item.id}
-              renderItem={renderScannedWordItem}
-              contentContainerStyle={styles.modalListContent}
-              showsVerticalScrollIndicator={false}
-            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pairChipsContainer}
+            >
+              {MODES.map((m) => {
+                const isSelected = mode === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    onPress={() => {
+                      setMode(m.id);
+                      setErrors({});
+                    }}
+                    style={[
+                      styles.pairChip,
+                      {
+                        backgroundColor: isSelected
+                          ? isDark
+                            ? m.color + "25"
+                            : m.color + "15"
+                          : theme.card,
+                        borderColor: isSelected ? m.color : theme.border,
+                        borderWidth: isSelected ? 1.5 : 1,
+                      },
+                      isSelected && (isDark ? Shadows.dark.sm : Shadows.light.sm),
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.pairChipDot,
+                        { backgroundColor: isSelected ? m.color : theme.muted },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.pairChipText,
+                        {
+                          color: isSelected ? (isDark ? "#fff" : m.color) : theme.textSecondary,
+                          fontWeight: isSelected ? "700" : "500",
+                        },
+                      ]}
+                    >
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
+          {/* ── SMART OCR SCAN BANNER ── */}
+          <View style={styles.scanBannerSection}>
             <View
               style={[
-                styles.modalFooter,
+                styles.scanBanner,
                 {
-                  borderTopColor: theme.border,
-                  backgroundColor: theme.background,
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
                 },
+                isDark ? Shadows.dark.xs : Shadows.light.xs,
               ]}
             >
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  { backgroundColor: theme.tint, width: "100%", marginTop: 0 },
-                ]}
-                onPress={saveSelectedWords}
-              >
-                <Text style={styles.buttonText}>
-                  {t("saveToVocabulary")}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.scanBannerLeft}>
+                <View
+                  style={[
+                    styles.scanIconBox,
+                    { backgroundColor: isDark ? "rgba(99,102,241,0.15)" : Palette.indigo50 },
+                  ]}
+                >
+                  <Ionicons name="scan-outline" size={22} color={theme.tint} />
+                </View>
+                <View style={styles.scanBannerText}>
+                  <Text style={[styles.scanBannerTitle, { color: theme.text }]}>
+                    Rasmdan skanerlash (OCR)
+                  </Text>
+                  <Text style={[styles.scanBannerSub, { color: theme.textSecondary }]}>
+                    Kitob yoki daftardan so'zlarni avtomatik o'qing
+                  </Text>
+                </View>
+              </View>
+
+              {loadingImage ? (
+                <View style={styles.scanLoading}>
+                  <ActivityIndicator size="small" color={theme.tint} />
+                </View>
+              ) : (
+                <View style={styles.scanButtonsGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.scanPillBtn,
+                      { backgroundColor: isDark ? "rgba(99,102,241,0.12)" : Palette.indigo50 },
+                    ]}
+                    onPress={handleTakePhoto}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="camera" size={16} color={theme.tint} />
+                    <Text style={[styles.scanPillText, { color: theme.tint }]}>Kamera</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.scanPillBtn,
+                      { backgroundColor: isDark ? "rgba(16,185,129,0.12)" : Palette.emerald50 },
+                    ]}
+                    onPress={handlePickImage}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="images" size={16} color={Palette.emerald500} />
+                    <Text style={[styles.scanPillText, { color: Palette.emerald500 }]}>Rasm</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
-          </View>
-        </Modal>
 
-        <View style={styles.form}>
-          {loadingImage ? (
-            <ActivityIndicator size="large" color={theme.tint} />
-          ) : (
-            <View style={styles.imageButtonsRow}>
-              <TouchableOpacity
+          {/* ── INPUT FIELDS CONTAINER (Rich Focus & Clear Actions) ── */}
+          <View style={styles.inputsContainer}>
+            {/* Uzbek Field */}
+            {showUz && (
+              <MotiView
+                from={{ opacity: 0, translateY: 10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: "timing", duration: 250 }}
+                style={styles.fieldGroup}
+              >
+                <View style={styles.fieldLabelRow}>
+                  <View style={styles.fieldTag}>
+                    <Text style={styles.fieldTagText}>UZ</Text>
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: theme.text }]}>
+                    {t("uzbek") || "O'zbekcha"}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    {
+                      backgroundColor: theme.inputBackground,
+                      borderColor: errors.uz
+                        ? Palette.rose500
+                        : focusedField === "uz"
+                        ? currentColor
+                        : theme.inputBorder,
+                      borderWidth: focusedField === "uz" || errors.uz ? 1.5 : 1,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.textInput, { color: theme.text }]}
+                    placeholder="Masalan: Kitob"
+                    placeholderTextColor={theme.muted}
+                    value={uz}
+                    onChangeText={(val) => {
+                      setUz(val);
+                      if (errors.uz) setErrors((e) => ({ ...e, uz: false }));
+                    }}
+                    onFocus={() => setFocusedField("uz")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  {uz.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setUz("")}
+                      style={styles.clearInputBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color={theme.muted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {errors.uz && (
+                  <Text style={styles.errorText}>O'zbekcha so'z kiritilishi shart</Text>
+                )}
+              </MotiView>
+            )}
+
+            {/* English Field */}
+            {showEn && (
+              <MotiView
+                from={{ opacity: 0, translateY: 10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: "timing", duration: 250, delay: 60 }}
+                style={styles.fieldGroup}
+              >
+                <View style={styles.fieldLabelRow}>
+                  <View style={[styles.fieldTag, { backgroundColor: "#3B82F618" }]}>
+                    <Text style={[styles.fieldTagText, { color: "#3B82F6" }]}>EN</Text>
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: theme.text }]}>
+                    {t("english") || "Inglizcha"}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    {
+                      backgroundColor: theme.inputBackground,
+                      borderColor: errors.en
+                        ? Palette.rose500
+                        : focusedField === "en"
+                        ? currentColor
+                        : theme.inputBorder,
+                      borderWidth: focusedField === "en" || errors.en ? 1.5 : 1,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.textInput, { color: theme.text }]}
+                    placeholder="e.g. Book"
+                    placeholderTextColor={theme.muted}
+                    value={en}
+                    onChangeText={(val) => {
+                      setEn(val);
+                      if (errors.en) setErrors((e) => ({ ...e, en: false }));
+                    }}
+                    onFocus={() => setFocusedField("en")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  {en.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setEn("")}
+                      style={styles.clearInputBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color={theme.muted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {errors.en && (
+                  <Text style={styles.errorText}>Inglizcha so'z kiritilishi shart</Text>
+                )}
+              </MotiView>
+            )}
+
+            {/* Russian Field */}
+            {showRu && (
+              <MotiView
+                from={{ opacity: 0, translateY: 10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: "timing", duration: 250, delay: 120 }}
+                style={styles.fieldGroup}
+              >
+                <View style={styles.fieldLabelRow}>
+                  <View style={[styles.fieldTag, { backgroundColor: Palette.amber500 + "18" }]}>
+                    <Text style={[styles.fieldTagText, { color: Palette.amber500 }]}>RU</Text>
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: theme.text }]}>
+                    {t("russian") || "Ruscha"}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    {
+                      backgroundColor: theme.inputBackground,
+                      borderColor: errors.ru
+                        ? Palette.rose500
+                        : focusedField === "ru"
+                        ? currentColor
+                        : theme.inputBorder,
+                      borderWidth: focusedField === "ru" || errors.ru ? 1.5 : 1,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.textInput, { color: theme.text }]}
+                    placeholder="Например: Книга"
+                    placeholderTextColor={theme.muted}
+                    value={ru}
+                    onChangeText={(val) => {
+                      setRu(val);
+                      if (errors.ru) setErrors((e) => ({ ...e, ru: false }));
+                    }}
+                    onFocus={() => setFocusedField("ru")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  {ru.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setRu("")}
+                      style={styles.clearInputBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color={theme.muted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {errors.ru && (
+                  <Text style={styles.errorText}>Ruscha so'z kiritilishi shart</Text>
+                )}
+              </MotiView>
+            )}
+          </View>
+
+          {/* ── PRIMARY SAVE BUTTON ── */}
+          <MotiView
+            from={{ opacity: 0, translateY: 15 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: "timing", duration: 300, delay: 180 }}
+            style={styles.saveBtnContainer}
+          >
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                { backgroundColor: currentColor },
+                isDark ? Shadows.dark.md : Shadows.light.md,
+              ]}
+              onPress={handleSave}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={editId ? "checkmark-circle" : "add-circle"}
+                size={22}
+                color="#fff"
+              />
+              <Text style={styles.saveButtonText}>
+                {editId
+                  ? t("updateWord") || "O'zgarishlarni saqlash"
+                  : t("saveWord") || "Lug'atga qo'shish"}
+              </Text>
+            </TouchableOpacity>
+          </MotiView>
+
+          {/* ── MODAL: SCANNED WORDS LIST ── */}
+          <Modal
+            visible={isModalVisible}
+            animationType="slide"
+            transparent={Platform.OS === "web"}
+            presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
+            onRequestClose={() => setIsModalVisible(false)}
+          >
+            <View
+              style={
+                Platform.OS === "web"
+                  ? {
+                      flex: 1,
+                      backgroundColor: theme.overlay,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      padding: 20,
+                    }
+                  : { flex: 1, backgroundColor: theme.background }
+              }
+            >
+              <View
                 style={[
-                  styles.iconButton,
-                  {
-                    backgroundColor: theme.card,
+                  styles.modalContainer,
+                  { backgroundColor: theme.background },
+                  Platform.OS === "web" && {
+                    width: "100%",
+                    maxWidth: 580,
+                    maxHeight: "88%",
+                    borderRadius: UI.borderRadius.xl,
+                    overflow: "hidden",
+                    borderWidth: 1,
                     borderColor: theme.border,
                   },
                 ]}
-                onPress={handleTakePhoto}
               >
-                <MaterialIcons name="photo-camera" size={32} color={theme.tint} />
-                <Text style={[styles.iconButtonText, { color: theme.text }]}>
-                  {t("takePhoto")}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.iconButton,
-                  {
-                    backgroundColor: theme.card,
-                    borderColor: theme.border,
-                  },
-                ]}
-                onPress={handlePickImage}
-              >
-                <MaterialIcons
-                  name="photo-library"
-                  size={32}
-                  color={theme.tint}
+                <View style={[styles.modalHeader, { borderBottomColor: theme.divider }]}>
+                  <View>
+                    <Text style={[styles.modalTitle, { color: theme.text }]}>
+                      Topilgan so'zlar
+                    </Text>
+                    <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                      {scannedWords.filter((w) => w.selected).length} ta so'z tanlandi
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setIsModalVisible(false)}
+                    style={[
+                      styles.modalCloseBtn,
+                      { backgroundColor: isDark ? "rgba(244,63,94,0.1)" : Palette.rose50 },
+                    ]}
+                  >
+                    <Ionicons name="close" size={20} color={Palette.rose500} />
+                  </TouchableOpacity>
+                </View>
+
+                <FlatList
+                  data={scannedWords}
+                  keyExtractor={(item) => item.id}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.modalListContent}
+                  renderItem={({ item }) => {
+                    const isEditing = editingScannedWordId === item.id;
+                    if (isEditing) {
+                      return (
+                        <View
+                          style={[
+                            styles.scannedWordCard,
+                            {
+                              backgroundColor: theme.card,
+                              borderColor: theme.tint,
+                              borderWidth: 1.5,
+                            },
+                          ]}
+                        >
+                          <TextInput
+                            style={[
+                              styles.modalInput,
+                              {
+                                backgroundColor: theme.inputBackground,
+                                color: theme.text,
+                                borderColor: theme.inputBorder,
+                              },
+                            ]}
+                            value={editScannedWordText}
+                            onChangeText={setEditScannedWordText}
+                            placeholder="So'z"
+                            placeholderTextColor={theme.muted}
+                          />
+                          <TextInput
+                            style={[
+                              styles.modalInput,
+                              {
+                                backgroundColor: theme.inputBackground,
+                                color: theme.text,
+                                borderColor: theme.inputBorder,
+                              },
+                            ]}
+                            value={editScannedTranslationText}
+                            onChangeText={setEditScannedTranslationText}
+                            placeholder="Tarjimasi"
+                            placeholderTextColor={theme.muted}
+                          />
+                          <View style={styles.modalEditButtonsRow}>
+                            <TouchableOpacity
+                              style={[styles.modalBtn, { backgroundColor: Palette.rose500 }]}
+                              onPress={() => setEditingScannedWordId(null)}
+                            >
+                              <Text style={styles.modalBtnText}>Bekor qilish</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.modalBtn,
+                                { backgroundColor: Palette.emerald500, marginLeft: 10 },
+                              ]}
+                              onPress={saveEditedScannedWord}
+                            >
+                              <Text style={styles.modalBtnText}>Saqlash</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <View
+                        style={[
+                          styles.scannedWordCard,
+                          {
+                            backgroundColor: theme.card,
+                            borderColor: theme.border,
+                          },
+                          !item.selected && { opacity: 0.5 },
+                        ]}
+                      >
+                        <View style={styles.scannedWordCardHeader}>
+                          <Switch
+                            value={item.selected}
+                            onValueChange={() => toggleScannedWordSelection(item.id)}
+                            trackColor={{ false: theme.muted, true: theme.tint }}
+                            thumbColor={item.selected ? "#fff" : "#f4f3f4"}
+                          />
+                          <View style={styles.scannedWordActions}>
+                            <TouchableOpacity
+                              onPress={() => startEditingScannedWord(item)}
+                              style={[
+                                styles.actionBtn,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(99,102,241,0.1)"
+                                    : Palette.indigo50,
+                                },
+                              ]}
+                            >
+                              <Ionicons name="pencil" size={16} color={theme.tint} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => deleteScannedWord(item.id)}
+                              style={[
+                                styles.actionBtn,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(244,63,94,0.1)"
+                                    : Palette.rose50,
+                                },
+                              ]}
+                            >
+                              <Ionicons name="trash" size={16} color={Palette.rose500} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <View style={styles.scannedWordContent}>
+                          <Text style={[styles.scannedWordTitle, { color: theme.text }]}>
+                            {item.word}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.scannedWordTranslation,
+                              { color: theme.textSecondary },
+                            ]}
+                          >
+                            {item.translation}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  }}
                 />
-                <Text style={[styles.iconButtonText, { color: theme.text }]}>
-                  {t("chooseFromGallery")}
-                </Text>
-              </TouchableOpacity>
+
+                <View
+                  style={[
+                    styles.modalFooter,
+                    {
+                      borderTopColor: theme.divider,
+                      backgroundColor: theme.card,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.tint, width: "100%" }]}
+                    onPress={saveSelectedWords}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="cloud-upload" size={20} color="#fff" />
+                    <Text style={styles.saveButtonText}>
+                      Lug'atga qo'shish ({scannedWords.filter((w) => w.selected).length})
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          )}
-        </View>
-
-        {showUz && (
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.text }]}>
-              {t("uzbek")}
-            </Text>
-            <TextInput
-              placeholder={`${t("example")}: Olma`}
-              placeholderTextColor={theme.muted}
-              value={uz}
-              onChangeText={(text) => { setUz(text); setErrors(e => ({...e, uz: false})); }}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: errors.uz ? "#ef4444" : theme.border,
-                  color: theme.text,
-                },
-              ]}
-            />
-          </View>
-        )}
-
-        {showEn && (
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.text }]}>
-              {t("english")}
-            </Text>
-            <TextInput
-              placeholder={`${t("example")}: Apple`}
-              placeholderTextColor={theme.muted}
-              value={en}
-              onChangeText={(text) => { setEn(text); setErrors(e => ({...e, en: false})); }}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: errors.en ? "#ef4444" : theme.border,
-                  color: theme.text,
-                },
-              ]}
-            />
-          </View>
-        )}
-
-        {showRu && (
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.text }]}>
-              {t("russian")}
-            </Text>
-            <TextInput
-              placeholder={`${t("example")}: Яблоко`}
-              placeholderTextColor={theme.muted}
-              value={ru}
-              onChangeText={(text) => { setRu(text); setErrors(e => ({...e, ru: false})); }}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: errors.ru ? "#ef4444" : theme.border,
-                  color: theme.text,
-                },
-              ]}
-            />
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.tint }]}
-          onPress={handleSave}
-        >
-          <Text style={styles.buttonText}>
-            {editId ? t("updateWord") : t("saveWord")}
-          </Text>
-        </TouchableOpacity>
+          </Modal>
+        </ScrollView>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -933,131 +1029,229 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
   },
-  scrollContainer: {
-    flex: 1,
-    // alignItems must NOT be here for ScrollView — put it in contentContainerStyle
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: Platform.OS === "web" ? 120 : 40,
-    alignItems: "center", 
-  },
   contentWrapper: {
     width: "100%",
-    maxWidth: 900, // Max width for large screens
+    maxWidth: UI.maxContentWidth,
+    flex: 1,
+  },
+  scrollContent: {
     padding: UI.padding,
-    paddingTop: 60,
+    paddingTop: Platform.OS === "web" ? 36 : 56,
+    paddingBottom: Platform.OS === "web" ? 110 : 36,
   },
+
+  // Header
   header: {
-    marginBottom: UI.spacing.lg,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
-  title: {
-    fontSize: 32,
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 4,
+  },
+  screenTitle: {
+    ...Typography.headingLarge,
     fontWeight: "800",
   },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginBottom: UI.spacing.lg,
+  screenSubtitle: {
+    ...Typography.bodyMedium,
   },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
+  editingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: UI.borderRadius.pill,
   },
-  cardWrapper: {
-    width: "48.5%",
-    marginBottom: UI.spacing.md,
-  },
-  card: {
-    width: "100%",
-    borderRadius: UI.borderRadius.large,
-    padding: UI.padding * 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  cardIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: UI.spacing.sm,
-  },
-  cardLabel: {
-    fontSize: 18,
+  editingBadgeText: {
+    ...Typography.caption,
     fontWeight: "700",
   },
-  cardLabelContainer: {
+  cancelEditBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: UI.borderRadius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Pair Selector Strip
+  pairSelectorWrapper: {
+    marginBottom: 20,
+  },
+  pairSelectorHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sectionCaption: {
+    ...Typography.overline,
+    letterSpacing: 1,
+  },
+  swapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: UI.borderRadius.pill,
+  },
+  swapButtonText: {
+    ...Typography.labelSmall,
+    fontWeight: "700",
+  },
+  pairChipsContainer: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  pairChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: UI.borderRadius.large,
+    gap: 8,
+  },
+  pairChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pairChipText: {
+    ...Typography.labelSmall,
+  },
+
+  // OCR Banner
+  scanBannerSection: {
+    marginBottom: 24,
+  },
+  scanBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderRadius: UI.borderRadius.large,
+    borderWidth: 1,
+  },
+  scanBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  scanIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: UI.borderRadius.medium,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanBannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  scanBannerTitle: {
+    ...Typography.labelLarge,
+    fontWeight: "700",
+  },
+  scanBannerSub: {
+    ...Typography.caption,
+  },
+  scanLoading: {
+    paddingHorizontal: 16,
+  },
+  scanButtonsGroup: {
+    flexDirection: "row",
+    gap: 6,
+    marginLeft: 8,
+  },
+  scanPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: UI.borderRadius.pill,
+  },
+  scanPillText: {
+    ...Typography.labelSmall,
+    fontWeight: "700",
+  },
+
+  // Input Fields
+  inputsContainer: {
+    gap: 16,
+    marginBottom: 28,
+  },
+  fieldGroup: {
+    gap: 8,
+  },
+  fieldLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingHorizontal: 2,
   },
-  form: {
-    marginBottom: UI.spacing.lg,
+  fieldTag: {
+    backgroundColor: Palette.emerald500 + "18",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: UI.borderRadius.pill,
   },
-  headerControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: UI.spacing.md,
+  fieldTagText: {
+    ...Typography.caption,
+    fontWeight: "800",
+    color: Palette.emerald500,
   },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-    marginBottom: UI.spacing.md,
-  },
-  inputGroup: {
-    marginBottom: UI.spacing.lg,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: UI.spacing.sm,
-    marginLeft: 4,
-  },
-  input: {
-    borderRadius: UI.borderRadius.medium,
-    borderWidth: 1,
-    paddingHorizontal: UI.spacing.md,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  button: {
-    paddingVertical: 16,
-    borderRadius: UI.borderRadius.medium,
-    alignItems: "center",
-    marginTop: UI.spacing.lg,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
+  fieldLabel: {
+    ...Typography.labelLarge,
     fontWeight: "700",
   },
-  imageButtonsRow: {
+  inputWrapper: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: UI.spacing.md,
+    alignItems: "center",
+    borderRadius: UI.borderRadius.large,
+    paddingHorizontal: 16,
+    height: 54,
   },
-  iconButton: {
+  textInput: {
     flex: 1,
-    borderRadius: UI.borderRadius.medium,
-    borderWidth: 1,
-    padding: UI.spacing.md,
+    height: "100%",
+    ...Typography.bodyLarge,
+  },
+  clearInputBtn: {
+    padding: 4,
+  },
+  errorText: {
+    ...Typography.caption,
+    color: Palette.rose500,
+    fontWeight: "600",
+    paddingHorizontal: 4,
+  },
+
+  // Save Button
+  saveBtnContainer: {
+    marginBottom: 20,
+  },
+  saveButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
+    height: 54,
+    borderRadius: UI.borderRadius.large,
   },
-  iconButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: UI.spacing.xs,
-    textAlign: "center",
+  saveButtonText: {
+    color: "#fff",
+    ...Typography.headingSmall,
+    fontWeight: "700",
   },
-  // Modal & Scanned Words Styles
+
+  // OCR Modal
   modalContainer: {
     flex: 1,
   },
@@ -1065,81 +1259,85 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: UI.padding,
+    padding: 20,
     borderBottomWidth: 1,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...Typography.headingMedium,
+    fontWeight: "700",
+  },
+  modalSubtitle: {
+    ...Typography.bodySmall,
+    marginTop: 2,
   },
   modalCloseBtn: {
-    padding: 5,
+    width: 36,
+    height: 36,
+    borderRadius: UI.borderRadius.pill,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalListContent: {
-    padding: UI.padding,
-    paddingBottom: 40,
+    padding: 16,
+    gap: 12,
   },
   scannedWordCard: {
+    padding: 14,
+    borderRadius: UI.borderRadius.medium,
     borderWidth: 1,
-    borderRadius: UI.borderRadius.large,
-    padding: UI.spacing.md,
-    marginBottom: UI.spacing.md,
   },
   scannedWordCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: UI.spacing.sm,
-  },
-  switchContainer: {
-    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
-    marginLeft: -5,
+    marginBottom: 8,
   },
   scannedWordActions: {
     flexDirection: "row",
-    gap: UI.spacing.md,
+    gap: 8,
   },
   actionBtn: {
-    padding: 5,
+    width: 32,
+    height: 32,
+    borderRadius: UI.borderRadius.pill,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scannedWordContent: {
-    paddingLeft: 5,
+    gap: 4,
   },
   scannedWordTitle: {
-    fontSize: 18,
+    ...Typography.labelLarge,
     fontWeight: "700",
-    marginBottom: 4,
   },
   scannedWordTranslation: {
-    fontSize: 16,
-    opacity: 0.8,
-  },
-  modalFooter: {
-    padding: UI.padding,
-    borderTopWidth: 1,
-    paddingBottom: 40,
+    ...Typography.bodyMedium,
   },
   modalInput: {
+    height: 44,
+    borderRadius: UI.borderRadius.medium,
     borderWidth: 1,
-    borderRadius: UI.borderRadius.small,
-    padding: UI.spacing.sm,
-    fontSize: 16,
-    marginBottom: UI.spacing.sm,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    ...Typography.bodyMedium,
   },
   modalEditButtonsRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: UI.spacing.sm,
-    marginTop: UI.spacing.xs,
+    marginTop: 4,
   },
   modalBtn: {
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: UI.borderRadius.small,
+    borderRadius: UI.borderRadius.medium,
   },
   modalBtnText: {
     color: "#fff",
+    ...Typography.labelSmall,
     fontWeight: "700",
-    fontSize: 14,
+  },
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
   },
 });

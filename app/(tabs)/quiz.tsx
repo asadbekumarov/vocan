@@ -1,6 +1,5 @@
 import QuizOption from "@/components/QuizOption";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { UI } from "@/constants/theme";
+import { Palette, Shadows, UI, Typography, ComponentTokens } from "@/constants/theme";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getWords, updateWord } from "@/storage/wordStorage";
@@ -29,13 +28,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
-const QUIZ_MODES: { id: QuizMode; from: string; to: string }[] = [
-  { id: "uz-en", from: "UZ", to: "EN" },
-  { id: "en-uz", from: "EN", to: "UZ" },
-  { id: "uz-ru", from: "UZ", to: "RU" },
-  { id: "ru-uz", from: "RU", to: "UZ" },
-  { id: "en-ru", from: "EN", to: "RU" },
-  { id: "ru-en", from: "RU", to: "EN" },
+const QUIZ_MODES: { id: QuizMode; from: string; to: string; color: string }[] = [
+  { id: "uz-en", from: "UZ", to: "EN", color: Palette.emerald500 },
+  { id: "en-uz", from: "EN", to: "UZ", color: '#3B82F6' },
+  { id: "uz-ru", from: "UZ", to: "RU", color: Palette.amber500 },
+  { id: "ru-uz", from: "RU", to: "UZ", color: '#8B5CF6' },
+  { id: "en-ru", from: "EN", to: "RU", color: '#EC4899' },
+  { id: "ru-en", from: "RU", to: "EN", color: '#14B8A6' },
 ];
 
 // Ovoz bilan javob berish funksiyasi (vaqtincha to'xtatildi, keyinroq davom ettiriladi)
@@ -185,7 +184,6 @@ export default function QuizScreen() {
         .filter((w) => w.nextReviewDate && w.nextReviewDate > today)
         .sort(() => Math.random() - 0.5);
 
-      // Chegara yo'q - barcha so'zlar testga kiritiladi (avval takrorlanishi kerak bo'lganlar, so'ng qolganlari)
       const shuffledQuestions = [...dueWords, ...nonDueWords];
       
       const allowedTypes = ["multiple", "input"];
@@ -258,8 +256,11 @@ export default function QuizScreen() {
     }
   }, [currentIndex, sessionQuestions.length, startTime]);
 
+  // ── RESULTS SCREEN ──
   if (isFinished) {
     const percentage = Math.round((score / sessionQuestions.length) * 100);
+    const isGood = percentage >= 70;
+    
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScrollView
@@ -286,71 +287,73 @@ export default function QuizScreen() {
               transition={{ type: "timing", duration: 250, delay: 100 }}
               style={[
                 styles.resultsCard,
-                { backgroundColor: isDark ? "#111827" : "#fff" },
+                { backgroundColor: theme.card },
+                isDark ? Shadows.dark.md : Shadows.light.md,
               ]}
             >
+              {/* Result Icon */}
               <MotiView
-                from={{ scale: 0.8 }}
+                from={{ scale: 0.5 }}
                 animate={{ scale: 1 }}
-                transition={{ type: "timing", duration: 200, delay: 200 }}
+                transition={{ type: "spring", delay: 200 }}
               >
-                <IconSymbol
-                  name={
-                    percentage >= 70 ? "checkmark.circle.fill" : "xmark.circle.fill"
-                  }
-                  size={80}
-                  color={theme.tint}
-                />
+                <View style={[styles.resultIconBox, { 
+                  backgroundColor: isGood 
+                    ? (isDark ? 'rgba(16,185,129,0.15)' : Palette.emerald50) 
+                    : (isDark ? 'rgba(244,63,94,0.15)' : Palette.rose50) 
+                }]}>
+                  <Ionicons 
+                    name={isGood ? "trophy" : "refresh"} 
+                    size={44} 
+                    color={isGood ? Palette.emerald500 : Palette.rose500} 
+                  />
+                </View>
               </MotiView>
+
               <Text style={[styles.scoreTitle, { color: theme.text }]}>
                 {t("quizComplete")}
               </Text>
               
+              {/* Stats Row */}
               <View style={styles.statsContainer}>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: theme.tint }]}>{score}</Text>
-                  <Text style={[styles.statLabel, { color: theme.text }]}>{t("correctCount")}</Text>
+                <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(16,185,129,0.1)' : Palette.emerald50 }]}>
+                  <Text style={[styles.statValue, { color: Palette.emerald500 }]}>{score}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{t("correctCount")}</Text>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: "#ef4444" }]}>
+                <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(244,63,94,0.1)' : Palette.rose50 }]}>
+                  <Text style={[styles.statValue, { color: Palette.rose500 }]}>
                     {sessionQuestions.length - score}
                   </Text>
-                  <Text style={[styles.statLabel, { color: theme.text }]}>{t("incorrectCount")}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{t("incorrectCount")}</Text>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: "#3b82f6" }]}>{totalTime}</Text>
-                  <Text style={[styles.statLabel, { color: theme.text }]}>{t("seconds")}</Text>
+                <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : Palette.indigo50 }]}>
+                  <Text style={[styles.statValue, { color: theme.tint }]}>{totalTime}s</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{t("seconds")}</Text>
                 </View>
               </View>
 
-              <View style={styles.timeTakenContainer}>
-                <Ionicons name="time-outline" size={16} color={theme.muted} />
-                <Text style={[styles.timeTakenText, { color: theme.muted }]}>
-                  {t("timeTaken")}: {totalTime} {t("seconds")}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.percentageBar,
-                  { backgroundColor: isDark ? "#2A2C2E" : "#f0f0f0" },
-                ]}
-              >
+              {/* Progress Bar */}
+              <View style={[styles.percentageBar, { backgroundColor: theme.surfaceSubtle }]}>
                 <MotiView
                   from={{ width: "0%" }}
                   animate={{ width: `${percentage}%` }}
                   transition={{ type: "timing", duration: 500, delay: 300 }}
-                  style={[styles.percentageFill, { backgroundColor: theme.tint }]}
+                  style={[styles.percentageFill, { 
+                    backgroundColor: isGood ? Palette.emerald500 : Palette.amber500 
+                  }]}
                 />
               </View>
-              <Text style={[styles.percentageText, { color: theme.tint }]}>
+              <Text style={[styles.percentageText, { color: isGood ? Palette.emerald500 : Palette.amber500 }]}>
                 {percentage}% {t("accuracy")}
               </Text>
 
+              {/* Restart */}
               <TouchableOpacity
                 style={[styles.restartButton, { backgroundColor: theme.tint }]}
                 onPress={() => startQuiz(words, mode)}
+                activeOpacity={0.8}
               >
+                <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 8 }} />
                 <Text style={styles.restartButtonText}>{t("tryAgain")}</Text>
               </TouchableOpacity>
             </MotiView>
@@ -366,6 +369,10 @@ export default function QuizScreen() {
   const langNames: Record<string, string> = { uz: "o'zbek", en: "ingliz", ru: "rus" };
   const targetLang = langNames[currentTo] || "tarjimani";
 
+  const currentModeData = QUIZ_MODES.find(m => m.id === mode);
+  const currentColor = currentModeData?.color ?? theme.tint;
+  const progressPercent = sessionQuestions.length > 0 ? ((currentIndex) / sessionQuestions.length) * 100 : 0;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.contentWrapper}>
@@ -376,243 +383,266 @@ export default function QuizScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <Text style={[styles.title, { color: theme.text }]}>
                 {t("quiz")}
               </Text>
               <View
+                style={[
+                  styles.progressBadge,
+                  {
+                    backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : Palette.indigo50,
+                  },
+                ]}
+              >
+                <Text style={[styles.progressText, { color: theme.tint }]}>
+                  {currentIndex + 1} / {sessionQuestions.length}
+                </Text>
+              </View>
+            </View>
+
+            {/* Progress bar */}
+            {sessionQuestions.length > 0 && (
+              <View style={[styles.quizProgressBar, { backgroundColor: theme.surfaceSubtle }]}>
+                <MotiView
+                  animate={{ width: `${progressPercent}%` }}
+                  transition={{ type: "timing", duration: 300 }}
+                  style={[styles.quizProgressFill, { backgroundColor: theme.tint }]}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Mode Selector */}
+          <View style={styles.modeSelector}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modeScroll}
+            >
+              {QUIZ_MODES.map((m) => {
+                const isActive = mode === m.id;
+                const [mFrom, mTo] = m.id.split("-");
+                const isMirror = mFrom === currentTo && mTo === currentFrom;
+                const isMainPair = isActive || isMirror;
+
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[
+                      styles.modeItem,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                      },
+                      isActive && {
+                        backgroundColor: theme.tint,
+                        borderColor: theme.tint,
+                      },
+                      isMirror && { borderColor: theme.tint },
+                      !isMainPair && styles.modeItemDimmed,
+                    ]}
+                    onPress={() => changeMode(m.id)}
+                  >
+                    <View style={styles.modeLabelContainer}>
+                      <Text
+                        style={[
+                          styles.modeLabel,
+                          { color: theme.text },
+                          isActive && styles.modeLabelActive,
+                          isMirror && { color: theme.tint },
+                        ]}
+                      >
+                        {m.from}
+                      </Text>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={10}
+                        color={isActive ? "#fff" : theme.tint}
+                      />
+                      <Text
+                        style={[
+                          styles.modeLabel,
+                          { color: theme.text },
+                          isActive && styles.modeLabelActive,
+                          isMirror && { color: theme.tint },
+                        ]}
+                      >
+                        {m.to}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {isLoading ? (
+            <View style={styles.centered}>
+              <Text
+                style={[styles.errorText, { color: theme.textSecondary }]}
+              >
+                {t("loading")}
+              </Text>
+            </View>
+          ) : currentQuiz ? (
+            <View style={[styles.quizArea, { paddingBottom: bottomPad }]}>
+                {/* Question Card */}
+                <MotiView
+                  key={currentIndex}
+                  from={{ opacity: 0, scale: 0.95, translateY: -8 }}
+                  animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                  transition={{ type: "timing", duration: 250 }}
                   style={[
-                    styles.progressBadge,
+                    styles.questionCard,
+                    { backgroundColor: theme.card },
+                    isDark ? Shadows.dark.md : Shadows.light.md,
+                  ]}
+                >
+                  <View style={[styles.questionTypeBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : Palette.indigo50 }]}>
+                    <Ionicons 
+                      name={currentQuiz.type === 'input' ? 'create' : currentQuiz.type === 'speech' ? 'mic' : 'list'} 
+                      size={12} 
+                      color={theme.tint} 
+                    />
+                    <Text style={[styles.questionTypeBadgeText, { color: theme.tint }]}>
+                      {currentQuiz.type === 'input' ? 'Yozing' : currentQuiz.type === 'speech' ? 'Ayting' : 'Tanlang'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.questionText, { color: theme.text }]}>
+                    {currentQuiz.question}
+                  </Text>
+                </MotiView>
+              
+              {/* Answer Area */}
+              {currentQuiz.type === "input" ? (
+                <MotiView
+                  from={{ opacity: 0, translateY: 10 }}
+                  animate={{ opacity: 1, translateY: 0 }}
+                  style={[
+                    styles.inputContainer,
                     {
-                      backgroundColor: theme.card,
-                      borderColor: theme.border,
+                      backgroundColor: theme.inputBackground,
+                      borderColor: isConfirmed
+                        ? userInput.trim().toLowerCase() === currentQuiz.correctAnswer.trim().toLowerCase()
+                          ? Palette.emerald500
+                          : Palette.rose500
+                        : theme.inputBorder,
                     },
                   ]}
                 >
-                  <Text style={[styles.progressText, { color: theme.tint }]}>
-                    {currentIndex + 1} / {sessionQuestions.length}
+                  <TextInput
+                    style={[styles.answerInput, { color: theme.text }]}
+                    placeholder={`${targetLang} tilida yozing...`}
+                    placeholderTextColor={theme.muted}
+                    value={userInput}
+                    onChangeText={setUserInput}
+                    editable={!isConfirmed}
+                    autoFocus
+                    onSubmitEditing={handleConfirm}
+                  />
+                </MotiView>
+              ) : ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech" ? (
+                <View style={styles.voiceArea}>
+                  <MotiView
+                    animate={{
+                      scale: isListening ? [1, 1.2, 1] : 1,
+                      opacity: isListening ? [0.8, 1, 0.8] : 1,
+                    }}
+                    transition={{
+                      loop: Infinity,
+                      duration: 1000,
+                    }}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.micButton,
+                        {
+                          backgroundColor: isListening ? Palette.rose500 : theme.tint,
+                          borderColor: isConfirmed
+                            ? userInput.trim().toLowerCase() === currentQuiz.correctAnswer.trim().toLowerCase()
+                              ? Palette.emerald500
+                              : Palette.rose500
+                            : "transparent",
+                          borderWidth: isConfirmed ? 4 : 0,
+                        },
+                      ]}
+                      onPress={isListening ? stopListening : startListening}
+                      disabled={isConfirmed}
+                    >
+                      <Ionicons
+                        name={isListening ? "stop" : "mic"}
+                        size={36}
+                        color="#fff"
+                      />
+                    </TouchableOpacity>
+                  </MotiView>
+                  <Text style={[styles.voiceText, { color: theme.text }]}>
+                    {isExpoGo
+                      ? t("speechNotSupported")
+                      : isListening
+                      ? t("listening")
+                      : userInput
+                      ? userInput
+                      : t("pressToSpeak")}
                   </Text>
                 </View>
-              </View>
-            </View>
+              ) : (
+                <View style={styles.optionsContainer}>
+                  {currentQuiz.options.map((opt: string, idx: number) => (
+                    <QuizOption
+                      key={opt}
+                      index={idx}
+                      text={opt}
+                      isSelected={selectedOption === opt}
+                      isCorrect={isConfirmed && opt === currentQuiz.correctAnswer}
+                      isWrong={
+                        isConfirmed &&
+                        selectedOption === opt &&
+                        opt !== currentQuiz.correctAnswer
+                      }
+                      disabled={isConfirmed}
+                      onPress={() => handleSelect(opt)}
+                    />
+                  ))}
+                </View>
+              )}
 
-            <View style={styles.modeSelector}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.modeScroll}
-              >
-                {QUIZ_MODES.map((m) => {
-                  const isActive = mode === m.id;
-                  const [mFrom, mTo] = m.id.split("-");
-                  const [currentFrom, currentTo] = mode.split("-");
-                  const isMirror = mFrom === currentTo && mTo === currentFrom;
-                  const isMainPair = isActive || isMirror;
-
-                  return (
-                    <TouchableOpacity
-                      key={m.id}
-                      style={[
-                        styles.modeItem,
-                        {
-                          backgroundColor: theme.card,
-                          borderColor: theme.border,
-                        },
-                        isActive && {
-                          backgroundColor: theme.tint,
-                          borderColor: theme.tint,
-                        },
-                        isMirror && { borderColor: theme.tint },
-                        !isMainPair && styles.modeItemDimmed,
-                      ]}
-                      onPress={() => changeMode(m.id)}
-                    >
-                      <View style={styles.modeLabelContainer}>
-                        <Text
-                          style={[
-                            styles.modeLabel,
-                            { color: theme.text },
-                            isActive && styles.modeLabelActive,
-                            isMirror && { color: theme.tint },
-                          ]}
-                        >
-                          {m.from}
-                        </Text>
-                        <IconSymbol
-                          name="arrow.right"
-                          size={12}
-                          color={isActive ? "#fff" : theme.tint}
-                        />
-                        <Text
-                          style={[
-                            styles.modeLabel,
-                            { color: theme.text },
-                            isActive && styles.modeLabelActive,
-                            isMirror && { color: theme.tint },
-                          ]}
-                        >
-                          {m.to}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {isLoading ? (
-              <View style={styles.centered}>
-                <Text
-                  style={[styles.errorText, { color: theme.text, opacity: 0.5 }]}
-                >
-                  {t("loading")}
-                </Text>
-              </View>
-            ) : currentQuiz ? (
-              <View style={[styles.quizArea, { paddingBottom: bottomPad }]}>
-                  <MotiView
-                    key={currentIndex}
-                    from={{ opacity: 0, scale: 0.95, translateY: -8 }}
-                    animate={{ opacity: 1, scale: 1, translateY: 0 }}
-                    transition={{ type: "timing", duration: 250 }}
-                    style={[
-                      styles.questionCard,
-                      { backgroundColor: theme.card },
-                    ]}
-                  >
-                    <Text style={[styles.questionText, { color: theme.text }]}>
-                      {currentQuiz.question}
-                    </Text>
-                  </MotiView>
-                
-                {currentQuiz.type === "input" ? (
+              {/* Confirm Button */}
+              <View style={styles.footer}>
+                {(selectedOption || ((currentQuiz.type === "input" || (ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech")) && userInput.trim())) && !isConfirmed && (
                   <MotiView
                     from={{ opacity: 0, translateY: 10 }}
                     animate={{ opacity: 1, translateY: 0 }}
-                    style={[
-                      styles.inputContainer,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: isConfirmed
-                          ? userInput.trim().toLowerCase() === currentQuiz.correctAnswer.trim().toLowerCase()
-                            ? "#10b981"
-                            : "#ef4444"
-                          : theme.border,
-                      },
-                    ]}
+                    transition={{ type: "timing", duration: 200 }}
                   >
-                    <TextInput
-                      style={[styles.answerInput, { color: theme.text }]}
-                      placeholder={`${targetLang} tilida yozing...`}
-                      placeholderTextColor={theme.muted}
-                      value={userInput}
-                      onChangeText={setUserInput}
-                      editable={!isConfirmed}
-                      autoFocus
-                      onSubmitEditing={handleConfirm}
-                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.mainButton,
+                        { backgroundColor: theme.tint },
+                      ]}
+                      onPress={handleConfirm}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="checkmark" size={20} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.mainButtonText}>{t("confirm")}</Text>
+                    </TouchableOpacity>
                   </MotiView>
-                ) : ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech" ? (
-                  <View style={styles.voiceArea}>
-                    <MotiView
-                      animate={{
-                        scale: isListening ? [1, 1.2, 1] : 1,
-                        opacity: isListening ? [0.8, 1, 0.8] : 1,
-                      }}
-                      transition={{
-                        loop: Infinity,
-                        duration: 1000,
-                      }}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.micButton,
-                          {
-                            backgroundColor: isListening ? "#ef4444" : theme.tint,
-                            borderColor: isConfirmed
-                              ? userInput.trim().toLowerCase() === currentQuiz.correctAnswer.trim().toLowerCase()
-                                ? "#10b981"
-                                : "#ef4444"
-                              : "transparent",
-                            borderWidth: isConfirmed ? 4 : 0,
-                          },
-                        ]}
-                        onPress={isListening ? stopListening : startListening}
-                        disabled={isConfirmed}
-                      >
-                        <Ionicons
-                          name={isListening ? "stop" : "mic"}
-                          size={40}
-                          color="#fff"
-                        />
-                      </TouchableOpacity>
-                    </MotiView>
-                    <Text style={[styles.voiceText, { color: theme.text }]}>
-                      {isExpoGo
-                        ? t("speechNotSupported")
-                        : isListening
-                        ? t("listening")
-                        : userInput
-                        ? userInput
-                        : t("pressToSpeak")}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.optionsContainer}>
-                    {currentQuiz.options.map((opt: string, idx: number) => (
-                      <QuizOption
-                        key={opt}
-                        index={idx}
-                        text={opt}
-                        isSelected={selectedOption === opt}
-                        isCorrect={isConfirmed && opt === currentQuiz.correctAnswer}
-                        isWrong={
-                          isConfirmed &&
-                          selectedOption === opt &&
-                          opt !== currentQuiz.correctAnswer
-                        }
-                        disabled={isConfirmed}
-                        onPress={() => handleSelect(opt)}
-                      />
-                    ))}
-                  </View>
                 )}
-
-                <View style={styles.footer}>
-                  {(selectedOption || ((currentQuiz.type === "input" || (ENABLE_SPEECH_RECOGNITION && currentQuiz.type === "speech")) && userInput.trim())) && !isConfirmed && (
-                    <MotiView
-                      from={{ opacity: 0, translateY: 10 }}
-                      animate={{ opacity: 1, translateY: 0 }}
-                      transition={{ type: "timing", duration: 200 }}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.mainButton,
-                          { backgroundColor: theme.tint },
-                        ]}
-                        onPress={handleConfirm}
-                      >
-                        <Text style={styles.mainButtonText}>{t("confirm")}</Text>
-                      </TouchableOpacity>
-                    </MotiView>
-                  )}
-                </View>
               </View>
-            ) : (
-            <View style={[styles.centered, { padding: 20 }]}>
-              <IconSymbol
-                name="language"
-                size={64}
-                color={isDark ? "#333" : "#ccc"}
-              />
-              <Text
-                style={[styles.errorText, { color: theme.text, opacity: 0.5 }]}
-              >
-                {mode.toUpperCase()}: {t("minWordsError")}
-              </Text>
             </View>
-          )}
+          ) : (
+          <View style={[styles.centered, { padding: 20 }]}>
+            <View style={[styles.emptyQuizIcon, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : Palette.indigo50 }]}>
+              <Ionicons name="language" size={48} color={theme.tint} />
+            </View>
+            <Text style={[styles.errorText, { color: theme.textSecondary }]}>
+              {mode.toUpperCase()}: {t("minWordsError")}
+            </Text>
+          </View>
+        )}
         </ScrollView>
       </View>
     </View>
@@ -622,11 +652,11 @@ export default function QuizScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center", // Center for web
+    alignItems: "center",
   },
   contentWrapper: {
     width: "100%",
-    maxWidth: 600, // Max width for large screens
+    maxWidth: UI.maxContentWidth,
     paddingHorizontal: UI.padding,
     paddingTop: 60,
     flex: 1,
@@ -637,29 +667,37 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: { fontSize: 32, fontWeight: "800" },
+  title: { ...Typography.displaySmall },
   progressBadge: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: UI.borderRadius.large,
-    borderWidth: 1,
+    borderRadius: UI.borderRadius.pill,
   },
-  progressText: { fontSize: 14, fontWeight: "700" },
+  progressText: { ...Typography.labelMedium },
+  quizProgressBar: {
+    height: 4,
+    borderRadius: 2,
+    marginTop: 14,
+    overflow: 'hidden',
+  },
+  quizProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
   modeSelector: { marginBottom: UI.spacing.lg, marginHorizontal: -UI.padding },
   modeScroll: {
     paddingHorizontal: UI.padding,
   },
   modeItem: {
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: UI.borderRadius.large,
+    paddingHorizontal: 14,
+    borderRadius: UI.borderRadius.pill,
     borderWidth: 1,
     marginRight: UI.spacing.sm,
   },
-  modeItemDimmed: { opacity: 0.4 },
+  modeItemDimmed: { opacity: 0.35 },
   modeLabel: {
-    fontSize: 14,
-    fontWeight: "600",
+    ...Typography.labelSmall,
     marginHorizontal: 3,
   },
   modeLabelActive: { color: "#fff" },
@@ -669,28 +707,36 @@ const styles = StyleSheet.create({
   },
   quizArea: { flex: 1 },
   questionCard: {
-    padding: 40,
+    padding: 32,
+    paddingTop: 20,
     borderRadius: UI.borderRadius.xl,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: UI.spacing.lg,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
   },
-  questionText: { fontSize: 28, fontWeight: "700", textAlign: "center" },
-  optionsContainer: { gap: 12 },
+  questionTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: UI.borderRadius.pill,
+    marginBottom: 16,
+  },
+  questionTypeBadgeText: {
+    ...Typography.caption,
+    fontWeight: '700',
+  },
+  questionText: { ...Typography.headingLarge, textAlign: "center" },
+  optionsContainer: { gap: 0 },
   inputContainer: {
-    padding: 12,
+    padding: 14,
     borderRadius: UI.borderRadius.large,
     borderWidth: 2,
     marginTop: UI.spacing.md,
   },
   answerInput: {
-    fontSize: 20,
-    fontWeight: "600",
+    ...Typography.headingSmall,
     paddingVertical: 8,
     textAlign: "center",
   },
@@ -701,20 +747,14 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   micButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
   },
   voiceText: {
-    fontSize: 18,
-    fontWeight: "600",
+    ...Typography.headingSmall,
     textAlign: "center",
   },
   footer: { marginTop: UI.spacing.lg, marginBottom: 20 },
@@ -722,64 +762,73 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: UI.borderRadius.medium,
     alignItems: "center",
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
-  mainButtonText: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  mainButtonText: { color: "#fff", ...Typography.labelLarge, fontWeight: '700' },
   resultsCard: {
-    padding: UI.padding,
+    padding: UI.spacing.lg,
     borderRadius: UI.borderRadius.xl,
     alignItems: "center",
     marginTop: UI.spacing.lg,
   },
+  resultIconBox: {
+    width: 88,
+    height: 88,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
     width: "100%",
     marginTop: UI.spacing.lg,
-    paddingHorizontal: UI.spacing.md,
+    gap: 12,
   },
   statBox: {
     alignItems: "center",
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: UI.borderRadius.large,
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: "800",
+    ...Typography.headingLarge,
   },
   statLabel: {
-    fontSize: 12,
-    fontWeight: "600",
+    ...Typography.caption,
     marginTop: 4,
     textTransform: "uppercase",
-    opacity: 0.7,
   },
-  timeTakenContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: UI.spacing.lg,
-    opacity: 0.8,
-  },
-  timeTakenText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  scoreTitle: { fontSize: 24, fontWeight: "800", marginTop: UI.spacing.md },
+  scoreTitle: { ...Typography.headingLarge, marginTop: UI.spacing.md },
   percentageBar: {
-    height: 12,
+    height: 8,
     width: "100%",
-    borderRadius: 6,
+    borderRadius: 4,
     marginTop: UI.spacing.lg,
     overflow: "hidden",
   },
-  percentageFill: { height: "100%", borderRadius: 6 },
-  percentageText: { fontSize: 20, fontWeight: "800", marginTop: UI.spacing.md },
+  percentageFill: { height: "100%", borderRadius: 4 },
+  percentageText: { ...Typography.headingMedium, marginTop: UI.spacing.sm },
   restartButton: {
     width: "100%",
     paddingVertical: 16,
     borderRadius: UI.borderRadius.medium,
     alignItems: "center",
+    justifyContent: 'center',
+    flexDirection: 'row',
     marginTop: UI.spacing.xl,
   },
-  restartButtonText: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  restartButtonText: { color: "#fff", ...Typography.labelLarge, fontWeight: '700' },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorText: { fontSize: 16, textAlign: "center" },
+  emptyQuizIcon: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  errorText: { ...Typography.bodyMedium, textAlign: "center" },
 });

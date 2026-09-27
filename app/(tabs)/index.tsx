@@ -1,4 +1,4 @@
-import { UI } from "@/constants/theme";
+import { Palette, Shadows, UI, Typography } from "@/constants/theme";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getWords } from "@/storage/wordStorage";
@@ -7,27 +7,29 @@ import { Word } from "@/types/Word";
 import { MotiView } from "@/utils/moti-wrapper";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState } from "react";
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from "react-native-reanimated";
+import StreakCard from "@/components/home/StreakCard";
+import StatBadge from "@/components/home/StatBadge";
+import QuickAction from "@/components/home/QuickAction";
+import { RecentWordItem } from "@/components/home/RecentWordItem";
 
 type Mode = "uz-en" | "en-uz" | "uz-ru" | "ru-uz" | "en-ru" | "ru-en";
 
 const MODE_COLORS: Record<Mode, string> = {
-  "uz-en": "#10B981", // Emerald
-  "en-uz": "#3B82F6", // Blue
-  "uz-ru": "#F59E0B", // Amber
-  "ru-uz": "#8B5CF6", // Violet
-  "en-ru": "#EC4899", // Pink
-  "ru-en": "#14B8A6", // Teal
+  "uz-en": Palette.emerald500,
+  "en-uz": "#3B82F6",
+  "uz-ru": Palette.amber500,
+  "ru-uz": "#8B5CF6",
+  "en-ru": "#EC4899",
+  "ru-en": "#14B8A6",
 };
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -42,73 +44,35 @@ const MODE_LABELS: Record<Mode, string> = {
 function getGreeting(lang: string): string {
   const hour = new Date().getHours();
   if (lang === "uz") {
-    if (hour < 12) return "Xayrli tong,";
-    if (hour < 17) return "Xayrli kun,";
-    if (hour < 21) return "Xayrli oqshom,";
-    return "Xayrli tun,";
+    if (hour < 12) return "Xayrli tong ☀️";
+    if (hour < 17) return "Xayrli kun 🌤";
+    if (hour < 21) return "Xayrli oqshom 🌅";
+    return "Xayrli tun 🌙";
   } else if (lang === "ru") {
-    if (hour < 12) return "Доброе утро,";
-    if (hour < 17) return "Добрый день,";
-    if (hour < 21) return "Добрый вечер,";
-    return "Доброй ночи,";
+    if (hour < 12) return "Доброе утро ☀️";
+    if (hour < 17) return "Добрый день 🌤";
+    if (hour < 21) return "Добрый вечер 🌅";
+    return "Доброй ночи 🌙";
   } else {
-    if (hour < 12) return "Good morning,";
-    if (hour < 17) return "Good afternoon,";
-    if (hour < 21) return "Good evening,";
-    return "Good night,";
+    if (hour < 12) return "Good morning ☀️";
+    if (hour < 17) return "Good afternoon 🌤";
+    if (hour < 21) return "Good evening 🌅";
+    return "Good night 🌙";
   }
-}
-
-function getTodayStr(): string {
-  return new Date().toISOString().split("T")[0];
 }
 
 function getFormattedDate(lang: string): string {
   const date = new Date();
-  const options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+  const options: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric" };
   try {
-    return date.toLocaleDateString(lang === 'uz' ? 'uz-UZ' : lang === 'ru' ? 'ru-RU' : 'en-US', options);
+    return date.toLocaleDateString(
+      lang === "uz" ? "uz-UZ" : lang === "ru" ? "ru-RU" : "en-US",
+      options
+    );
   } catch (e) {
     return date.toDateString();
   }
 }
-
-const Marquee = ({ children }: { children: React.ReactNode }) => {
-  const offset = useSharedValue(0);
-  const [contentWidth, setContentWidth] = useState(0);
-
-  useEffect(() => {
-    if (contentWidth > 0) {
-      offset.value = 0;
-      offset.value = withRepeat(
-        withTiming(-contentWidth, { duration: contentWidth * 25, easing: Easing.linear }),
-        -1,
-        false
-      );
-    }
-  }, [contentWidth, offset]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: offset.value }],
-    };
-  });
-
-  if (!children) return null;
-
-  return (
-    <View style={{ overflow: 'hidden', width: '100%', marginLeft: -8 }}>
-      <Animated.View 
-        style={[{ flexDirection: 'row', gap: 8, paddingLeft: 8 }, animatedStyle]}
-        onLayout={(e) => setContentWidth(e.nativeEvent.layout.width / 3)}
-      >
-        <View style={{ flexDirection: 'row', gap: 8 }}>{children}</View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>{children}</View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>{children}</View>
-      </Animated.View>
-    </View>
-  );
-};
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
@@ -123,7 +87,7 @@ export default function HomeScreen() {
     const data = await getWords();
     setWords(data);
 
-    const today = getTodayStr();
+    const today = new Date().toISOString().split("T")[0];
     setTodayCount(data.filter((w) => w.date?.startsWith(today)).length);
 
     const counts: Partial<Record<Mode, number>> = {};
@@ -144,74 +108,79 @@ export default function HomeScreen() {
 
   const recentWords = [...words]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 4);
+    .slice(0, 5);
 
   const greeting = getGreeting(language);
   const dateStr = getFormattedDate(language);
-
   const activeCategories = Object.values(modeCounts).filter((v) => (v ?? 0) > 0).length;
-
-  // Helper: get primary/secondary text from word
-  function getWordTexts(word: Word): { primary: string; secondary: string } {
-    const m = word.mode as Mode;
-    const pairs: Record<Mode, [string | undefined, string | undefined]> = {
-      "uz-en": [word.uz, word.en],
-      "en-uz": [word.en, word.uz],
-      "uz-ru": [word.uz, word.ru],
-      "ru-uz": [word.ru, word.uz],
-      "en-ru": [word.en, word.ru],
-      "ru-en": [word.ru, word.en],
-    };
-    const [p, s] = pairs[m] ?? [undefined, undefined];
-    return { primary: p ?? "–", secondary: s ?? "" };
-  }
 
   const translations = {
     uz: {
-      ready: "O'rganishga tayyormisiz?",
-      total: "Jami",
+      total: "Jami so'zlar",
       today: "Bugun",
-      categories: "Toifalar",
-      quick: "Harakatlar",
-      pairs: "Juftliklar",
+      categories: "Tillar",
+      actions: "Tezkor amallar",
+      addWord: "So'z qo'shish",
+      addWordSub: "Yangi so'z yoki ibora",
+      practice: "Mashq qilish",
+      practiceSub: "Test & SRS orqali",
+      explore: "Lug'at",
+      exploreSub: "Barcha kartochkalar",
+      pairs: "Til juftliklari",
       recent: "Oxirgi qo'shilganlar",
       all: "Barchasi",
-      noWordsTitle: "Sizning lug'atingiz bo'sh",
-      noWordsSub: "Yangi so'zlarni kashf eting va qo'shing",
+      noWordsTitle: "Lug'atingiz hali bo'sh",
+      noWordsSub: "O'rganishni boshlash uchun ilk so'zingizni qo'shing",
       addFirst: "Birinchi so'zni qo'shish",
-      practice: "Mashq",
-      explore: "Lug'at"
+      dailyGoal: "KUNLIK MAQSAD",
+      streak: "kunlik streak",
+      words: "so'z",
+      maxStreak: "Rekord",
     },
     en: {
-      ready: "Ready to learn?",
-      total: "Total",
+      total: "Total Words",
       today: "Today",
-      categories: "Categories",
-      quick: "Actions",
-      pairs: "Languages",
+      categories: "Languages",
+      actions: "Quick Actions",
+      addWord: "Add Word",
+      addWordSub: "New vocabulary",
+      practice: "Practice",
+      practiceSub: "Quiz & SRS review",
+      explore: "My Words",
+      exploreSub: "All vocabulary cards",
+      pairs: "Language Pairs",
       recent: "Recently Added",
       all: "View All",
       noWordsTitle: "Your vocabulary is empty",
-      noWordsSub: "Discover and add new words to start learning",
-      addFirst: "Add your first word",
-      practice: "Practice",
-      explore: "Explore"
+      noWordsSub: "Add your very first word to kickstart your journey",
+      addFirst: "Add First Word",
+      dailyGoal: "DAILY GOAL",
+      streak: "day streak",
+      words: "words",
+      maxStreak: "Record",
     },
     ru: {
-      ready: "Готовы учиться?",
-      total: "Всего",
+      total: "Всего слов",
       today: "Сегодня",
-      categories: "Категории",
-      quick: "Действия",
-      pairs: "Языки",
-      recent: "Последние",
+      categories: "Языки",
+      actions: "Быстрые действия",
+      addWord: "Добавить слово",
+      addWordSub: "Новое слово или фраза",
+      practice: "Практика",
+      practiceSub: "Викторина и SRS",
+      explore: "Мои слова",
+      exploreSub: "Все карточки слов",
+      pairs: "Языковые пары",
+      recent: "Недавно добавленные",
       all: "Все",
       noWordsTitle: "Ваш словарь пуст",
-      noWordsSub: "Открывайте и добавляйте новые слова",
+      noWordsSub: "Добавьте первое слово, чтобы начать обучение",
       addFirst: "Добавить первое слово",
-      practice: "Практика",
-      explore: "Словарь"
-    }
+      dailyGoal: "ДНЕВНАЯ ЦЕЛЬ",
+      streak: "дней подряд",
+      words: "слов",
+      maxStreak: "Рекорд",
+    },
   };
 
   const text = translations[language as keyof typeof translations] || translations.en;
@@ -223,232 +192,222 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* ── PREMIUM HEADER ── */}
+          {/* ── 1. HEADER (Greeting & Date) ── */}
           <MotiView
-            from={{ opacity: 0, translateY: -20 }}
+            from={{ opacity: 0, translateY: -16 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 500, easing: Easing.out(Easing.quad) }}
+            transition={{ type: "timing", duration: 400 }}
             style={styles.header}
           >
-            <View style={{ flex: 1, paddingRight: 16 }}>
-              <Text style={[styles.greeting, { color: theme.text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }]}>{greeting}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+                {dateStr.toUpperCase()}
+              </Text>
+              <Text style={[styles.greeting, { color: theme.text }]}>{greeting}</Text>
             </View>
-            <View style={[styles.avatarBox, { backgroundColor: theme.tint + '20' }]}>
-               <Ionicons name="sparkles" size={24} color={theme.tint} />
-            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.headerActionBtn,
+                { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : Palette.indigo50 },
+              ]}
+              onPress={() => router.push("/(tabs)/about-app")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={20} color={theme.tint} />
+            </TouchableOpacity>
           </MotiView>
 
-          {/* ── BENTO GRID ── */}
-          <View style={styles.bentoGrid}>
-            
-            {/* LARGE HERO TILE - Total Words */}
-            <MotiView
-              from={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring", delay: 100 }}
-              style={styles.bentoFull}
-            >
-              <View style={[styles.bentoCard, styles.heroTile, { backgroundColor: theme.tint }]}>
-                 <View style={styles.heroBgCircle} />
-                 <View style={styles.heroBgCircle2} />
-                 <View style={styles.heroContentRow}>
-                    <View>
-                      <Text style={styles.heroTileLabel}>{text.total.toUpperCase()}</Text>
-                      <Text style={styles.heroTileValue}>{words.length}</Text>
-                    </View>
-                    <View style={styles.heroStatsMini}>
-                      <View style={styles.miniStat}>
-                        <Text style={styles.miniStatValue}>+{todayCount}</Text>
-                        <Text style={styles.miniStatLabel}>{text.today}</Text>
-                      </View>
-                      <View style={styles.miniStatDivider} />
-                      <View style={styles.miniStat}>
-                        <Text style={styles.miniStatValue}>{activeCategories}</Text>
-                        <Text style={styles.miniStatLabel}>{text.categories}</Text>
-                      </View>
-                    </View>
-                 </View>
-                 {gamification && (
-                   <View style={{ marginTop: 24 }}>
-                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                       <Text style={{ color: '#ffffff90', fontSize: 12, fontWeight: '700' }}>KUNLIK MAQSAD</Text>
-                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                         <Ionicons name="flame" size={14} color="#FCD34D" />
-                         <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{gamification.currentStreak} kunlik Streak</Text>
-                       </View>
-                     </View>
-                     <View style={{ height: 8, backgroundColor: '#ffffff30', borderRadius: 4, overflow: 'hidden' }}>
-                       <View style={{ width: `${Math.min((todayCount / gamification.dailyGoal) * 100, 100)}%`, height: '100%', backgroundColor: '#fff', borderRadius: 4 }} />
-                     </View>
-                     <Text style={{ color: '#ffffff90', fontSize: 11, fontWeight: '600', marginTop: 8, textAlign: 'right' }}>
-                       {todayCount} / {gamification.dailyGoal} ta so'z
-                     </Text>
-                   </View>
-                 )}
-              </View>
-            </MotiView>
-
-            {/* ACTION TILES ROW */}
-            <View style={styles.bentoRow}>
-              
-              {/* Add Word Tile */}
-              <MotiView
-                from={{ opacity: 0, translateY: 20 }}
-                animate={{ opacity: 1, translateY: 0 }}
-                transition={{ type: "spring", delay: 200 }}
-                style={styles.bentoHalf}
-              >
-                <TouchableOpacity
-                  style={[styles.bentoCard, styles.actionTile, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: theme.border, borderWidth: 1 }]}
-                  onPress={() => router.push("/(tabs)/add-word")}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.iconWrapper, { backgroundColor: '#10B98120' }]}>
-                    <Ionicons name="add" size={28} color="#10B981" />
-                  </View>
-                  <Text style={[styles.actionTileTitle, { color: theme.text }]}>{(t as any)("addWord")}</Text>
-                  <Text style={[styles.actionTileSub, { color: theme.muted }]}>New word</Text>
-                </TouchableOpacity>
-              </MotiView>
-
-              {/* Quiz Tile */}
-              <MotiView
-                from={{ opacity: 0, translateY: 20 }}
-                animate={{ opacity: 1, translateY: 0 }}
-                transition={{ type: "spring", delay: 300 }}
-                style={styles.bentoHalf}
-              >
-                <TouchableOpacity
-                  style={[styles.bentoCard, styles.actionTile, { backgroundColor: isDark ? '#3730A3' : '#EEF2FF', borderColor: theme.border, borderWidth: isDark ? 0 : 1 }]}
-                  onPress={() => router.push("/(tabs)/quiz")}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.iconWrapper, { backgroundColor: '#6366F120' }]}>
-                    <Ionicons name="game-controller" size={28} color="#6366F1" />
-                  </View>
-                  <Text style={[styles.actionTileTitle, { color: isDark ? '#FFFFFF' : '#111827' }]}>{text.practice}</Text>
-                  <Text style={[styles.actionTileSub, { color: isDark ? '#A5B4FC' : '#6B7280' }]}>{(t as any)("quiz")}</Text>
-                </TouchableOpacity>
-              </MotiView>
-
-            </View>
-
-            {/* MY WORDS & LANGUAGES ROW */}
-            <View style={styles.bentoRow}>
-                {/* Dictionary Tile */}
-                <MotiView
-                  from={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ type: "spring", delay: 400 }}
-                  style={styles.bentoThird}
-                >
-                  <TouchableOpacity
-                    style={[styles.bentoCard, styles.smallTile, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: theme.border, borderWidth: 1 }]}
-                    onPress={() => router.push("/(tabs)/my-words" as any)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="library" size={24} color={theme.tint} style={{marginBottom: 8}} />
-                    <Text style={[styles.smallTileTitle, { color: theme.text }]}>{text.explore}</Text>
-                  </TouchableOpacity>
-                </MotiView>
-
-                {/* Languages Scroll Tile */}
-                <MotiView
-                  from={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ type: "spring", delay: 500 }}
-                  style={styles.bentoTwoThirds}
-                >
-                  <View style={[styles.bentoCard, styles.scrollTile, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: theme.border, borderWidth: 1 }]}>
-                    <Text style={[styles.scrollTileTitle, { color: theme.text }]}>{text.pairs}</Text>
-                    <Marquee>
-                      {(Object.entries(MODE_LABELS) as [Mode, string][]).map(([mode, label]) => {
-                        const count = modeCounts[mode] ?? 0;
-                        if (count === 0 && words.length > 0) return null; // Hide empty if there are words
-                        const color = MODE_COLORS[mode];
-                        return (
-                          <View key={mode} style={[styles.langPill, { backgroundColor: color + '15', borderColor: color + '30' }]}>
-                            <View style={[styles.langDot, { backgroundColor: color }]} />
-                            <Text style={[styles.langPillText, { color: isDark ? '#FFF' : color }]}>{label}</Text>
-                            <Text style={[styles.langPillCount, { color: color }]}>{count}</Text>
-                          </View>
-                        );
-                      })}
-                    </Marquee>
-                  </View>
-                </MotiView>
-            </View>
+          {/* ── 2. HERO: MOTIVATIONAL STREAK CARD ── */}
+          <View style={styles.heroSection}>
+            <StreakCard
+              gamification={gamification}
+              todayCount={todayCount}
+              labels={{
+                dailyGoal: text.dailyGoal,
+                streak: text.streak,
+                words: text.words,
+                maxStreak: text.maxStreak,
+              }}
+            />
           </View>
 
-          {/* ── RECENT WORDS ── */}
-          {recentWords.length > 0 && (
-            <MotiView
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: "timing", duration: 400, delay: 600 }}
-              style={styles.recentSection}
-            >
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>{text.recent}</Text>
-                <TouchableOpacity onPress={() => router.push("/(tabs)/my-words" as any)}>
-                  <Text style={[styles.seeAll, { color: theme.tint }]}>{text.all}</Text>
+          {/* ── 3. STAT BADGES ROW (Balanced visual weight) ── */}
+          <View style={styles.statsRow}>
+            <StatBadge
+              icon="book"
+              value={words.length}
+              label={text.total}
+              color={theme.tint}
+              index={0}
+            />
+            <StatBadge
+              icon="flash"
+              value={`+${todayCount}`}
+              label={text.today}
+              color={Palette.amber500}
+              index={1}
+            />
+            <StatBadge
+              icon="globe"
+              value={activeCategories}
+              label={text.categories}
+              color={Palette.emerald500}
+              index={2}
+            />
+          </View>
+
+          {/* ── 4. QUICK ACTIONS ROW (With Spring Feedback) ── */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              {text.actions}
+            </Text>
+          </View>
+
+          <View style={styles.actionsGrid}>
+            <QuickAction
+              title={text.addWord}
+              subtitle={text.addWordSub}
+              icon="add"
+              color={Palette.emerald500}
+              bgColor={isDark ? "rgba(16, 185, 129, 0.15)" : Palette.emerald50}
+              onPress={() => router.push("/(tabs)/add-word")}
+            />
+            <QuickAction
+              title={text.practice}
+              subtitle={text.practiceSub}
+              icon="play"
+              color={theme.tint}
+              highlight
+              onPress={() => router.push("/(tabs)/quiz")}
+            />
+          </View>
+
+          {/* ── 5. LANGUAGE PAIRS STRIP ── */}
+          {words.length > 0 && (
+            <View style={styles.languagesSection}>
+              <View style={styles.subSectionHeader}>
+                <Text style={[styles.subSectionTitle, { color: theme.textSecondary }]}>
+                  {text.pairs}
+                </Text>
+                <TouchableOpacity onPress={() => router.push("/(tabs)/my-words")}>
+                  <Text style={[styles.seeAllText, { color: theme.tint }]}>
+                    {text.all}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              
-              <View style={styles.recentList}>
-                {recentWords.map((word, index) => {
-                  const modeColor = MODE_COLORS[word.mode as Mode] ?? theme.tint;
-                  const { primary, secondary } = getWordTexts(word);
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.languagesScroll}
+              >
+                {(Object.entries(MODE_LABELS) as [Mode, string][]).map(([mode, label]) => {
+                  const count = modeCounts[mode] ?? 0;
+                  if (count === 0) return null;
+                  const color = MODE_COLORS[mode];
                   return (
                     <TouchableOpacity
-                      key={word.id}
-                      style={[styles.recentItem, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: theme.border }]}
+                      key={mode}
+                      style={[
+                        styles.langChip,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        },
+                        isDark ? Shadows.dark.xs : Shadows.light.xs,
+                      ]}
                       activeOpacity={0.7}
-                      onPress={() => router.push("/(tabs)/my-words" as any)}
+                      onPress={() => router.push("/(tabs)/my-words")}
                     >
-                      <View style={[styles.recentIcon, { backgroundColor: modeColor + '15' }]}>
-                        <Text style={[styles.recentIconText, { color: modeColor }]}>{primary.charAt(0).toUpperCase()}</Text>
-                      </View>
-                      <View style={styles.recentTexts}>
-                        <Text style={[styles.recentPrimary, { color: theme.text }]} numberOfLines={1}>{primary}</Text>
-                        {secondary ? <Text style={[styles.recentSecondary, { color: theme.muted }]} numberOfLines={1}>{secondary}</Text> : null}
-                      </View>
-                      <View style={[styles.recentBadge, { backgroundColor: theme.background }]}>
-                         <Text style={[styles.recentBadgeText, { color: theme.muted }]}>{MODE_LABELS[word.mode as Mode]}</Text>
+                      <View style={[styles.langChipDot, { backgroundColor: color }]} />
+                      <Text style={[styles.langChipLabel, { color: theme.text }]}>
+                        {label}
+                      </Text>
+                      <View style={[styles.langChipBadge, { backgroundColor: color + "18" }]}>
+                        <Text style={[styles.langChipCount, { color }]}>{count}</Text>
                       </View>
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            </MotiView>
+              </ScrollView>
+            </View>
           )}
 
-          {/* ── EMPTY STATE ── */}
+          {/* ── 6. RECENT WORDS SECTION ── */}
+          {recentWords.length > 0 && (
+            <View style={styles.recentSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  {text.recent}
+                </Text>
+                <TouchableOpacity onPress={() => router.push("/(tabs)/my-words")}>
+                  <Text style={[styles.seeAllText, { color: theme.tint }]}>
+                    {text.all}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.recentList}>
+                {recentWords.map((word, index) => (
+                  <RecentWordItem
+                    key={word.id}
+                    word={word}
+                    index={index}
+                    onPress={() => router.push("/(tabs)/my-words")}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ── 7. EMPTY STATE (First-time user) ── */}
           {words.length === 0 && (
             <MotiView
               from={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "timing", duration: 500, delay: 600 }}
+              transition={{ type: "timing", duration: 400, delay: 200 }}
+              style={styles.emptyWrapper}
             >
-              <View style={[styles.emptyContainer, { backgroundColor: isDark ? '#1F2937' : '#F9FAFB', borderColor: theme.border }]}>
-                <View style={[styles.emptyIllustration, { backgroundColor: theme.tint + '15' }]}>
-                  <Ionicons name="book-outline" size={48} color={theme.tint} />
+              <View
+                style={[
+                  styles.emptyCard,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                  isDark ? Shadows.dark.sm : Shadows.light.sm,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.emptyIconBox,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(99, 102, 241, 0.15)"
+                        : Palette.indigo50,
+                    },
+                  ]}
+                >
+                  <Ionicons name="sparkles" size={36} color={theme.tint} />
                 </View>
-                <Text style={[styles.emptyTitle, { color: theme.text }]}>{text.noWordsTitle}</Text>
-                <Text style={[styles.emptySub, { color: theme.muted }]}>{text.noWordsSub}</Text>
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                  {text.noWordsTitle}
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+                  {text.noWordsSub}
+                </Text>
                 <TouchableOpacity
-                  style={[styles.emptyBtn, { backgroundColor: theme.tint }]}
+                  style={[styles.emptyButton, { backgroundColor: theme.tint }]}
                   onPress={() => router.push("/(tabs)/add-word")}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="add" size={20} color="#fff" />
-                  <Text style={styles.emptyBtnText}>{text.addFirst}</Text>
+                  <Text style={styles.emptyButtonText}>{text.addFirst}</Text>
                 </TouchableOpacity>
               </View>
             </MotiView>
           )}
-
-
         </ScrollView>
       </View>
     </View>
@@ -456,96 +415,174 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center" },
-  contentWrapper: { width: "100%", maxWidth: 600, flex: 1 },
+  container: {
+    flex: 1,
+    alignItems: "center",
+  },
+  contentWrapper: {
+    width: "100%",
+    maxWidth: UI.maxContentWidth,
+    flex: 1,
+  },
   scrollContent: {
     padding: UI.padding,
-    paddingTop: Platform.OS === "web" ? 40 : 60,
-    paddingBottom: Platform.OS === "web" ? 120 : 40,
+    paddingTop: Platform.OS === "web" ? 36 : 56,
+    paddingBottom: Platform.OS === "web" ? 110 : 36,
   },
 
-  // Premium Header
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    marginBottom: 32,
+  // 1. Header
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
   },
-  dateText: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
-  greeting: { fontSize: 24, fontWeight: '400', letterSpacing: 0.2 },
-  subGreeting: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: 2 },
-  avatarBox: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  dateText: {
+    ...Typography.overline,
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  greeting: {
+    ...Typography.headingLarge,
+    fontWeight: "800",
+  },
+  headerActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: UI.borderRadius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-  // Bento Grid
-  bentoGrid: { gap: 16, marginBottom: 32 },
-  bentoRow: { flexDirection: 'row', gap: 16 },
-  bentoFull: { width: '100%' },
-  bentoHalf: { flex: 1 },
-  bentoThird: { flex: 0.35 },
-  bentoTwoThirds: { flex: 0.65 },
-  
-  bentoCard: {
+  // 2. Hero Section
+  heroSection: {
+    marginBottom: 16,
+  },
+
+  // 3. Stats Row
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+
+  // 4. Quick Actions
+  actionsGrid: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    ...Typography.headingSmall,
+    fontWeight: "700",
+  },
+  seeAllText: {
+    ...Typography.labelMedium,
+    fontWeight: "600",
+  },
+
+  // 5. Languages Strip
+  languagesSection: {
+    marginBottom: 24,
+  },
+  subSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  subSectionTitle: {
+    ...Typography.overline,
+    letterSpacing: 1,
+  },
+  languagesScroll: {
+    gap: 10,
+    paddingVertical: 2,
+  },
+  langChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: UI.borderRadius.medium,
+    borderWidth: 1,
+    gap: 8,
+  },
+  langChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  langChipLabel: {
+    ...Typography.labelSmall,
+    fontWeight: "700",
+  },
+  langChipBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: UI.borderRadius.pill,
+  },
+  langChipCount: {
+    ...Typography.caption,
+    fontWeight: "800",
+  },
+
+  // 6. Recent Words
+  recentSection: {
+    marginBottom: 20,
+  },
+  recentList: {
+    gap: 8,
+  },
+
+  // 7. Empty State
+  emptyWrapper: {
+    marginTop: 12,
+  },
+  emptyCard: {
+    padding: 32,
+    alignItems: "center",
+    borderRadius: UI.borderRadius.xl,
+    borderWidth: 1,
+  },
+  emptyIconBox: {
+    width: 72,
+    height: 72,
     borderRadius: 24,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12 },
-      android: { elevation: 3 },
-      web: { boxShadow: "0 4px 20px rgba(0,0,0,0.05)" } as any,
-    }),
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
-
-  // Hero Tile
-  heroTile: { padding: 24, position: 'relative' },
-  heroBgCircle: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: '#ffffff15', top: -100, right: -50 },
-  heroBgCircle2: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: '#ffffff10', bottom: -20, left: 20 },
-  heroContentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  heroTileLabel: { fontSize: 13, fontWeight: '700', color: '#ffffff90', letterSpacing: 1, marginBottom: 4 },
-  heroTileValue: { fontSize: 48, fontWeight: '900', color: '#fff', lineHeight: 52, letterSpacing: -1 },
-  heroStatsMini: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff20', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, backdropFilter: 'blur(10px)' as any },
-  miniStat: { alignItems: 'center' },
-  miniStatValue: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  miniStatLabel: { fontSize: 10, fontWeight: '600', color: '#ffffff90', marginTop: 2 },
-  miniStatDivider: { width: 1, height: 24, backgroundColor: '#ffffff40', marginHorizontal: 12 },
-
-  // Action Tiles
-  actionTile: { padding: 20, alignItems: 'flex-start', justifyContent: 'space-between', minHeight: 140 },
-  iconWrapper: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  actionTileTitle: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  actionTileSub: { fontSize: 13, fontWeight: '500' },
-
-  // Small Tiles
-  smallTile: { padding: 20, alignItems: 'center', justifyContent: 'center', minHeight: 110 },
-  smallTileTitle: { fontSize: 14, fontWeight: '700' },
-  
-  // Scroll Tile
-  scrollTile: { padding: 20, minHeight: 110, justifyContent: 'center' },
-  scrollTileTitle: { fontSize: 13, fontWeight: '700', marginBottom: 12 },
-  langScroll: { gap: 8, paddingRight: 20 },
-  langPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, gap: 6 },
-  langDot: { width: 6, height: 6, borderRadius: 3 },
-  langPillText: { fontSize: 12, fontWeight: '700' },
-  langPillCount: { fontSize: 12, fontWeight: '800' },
-
-  // Recent Section
-  recentSection: { marginTop: 8 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingHorizontal: 4 },
-  sectionTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3 },
-  seeAll: { fontSize: 14, fontWeight: "700" },
-  recentList: { gap: 12 },
-  recentItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, borderWidth: 1, gap: 16 },
-  recentIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  recentIconText: { fontSize: 18, fontWeight: '800' },
-  recentTexts: { flex: 1 },
-  recentPrimary: { fontSize: 16, fontWeight: "700", marginBottom: 2 },
-  recentSecondary: { fontSize: 14, fontWeight: "500" },
-  recentBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  recentBadgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
-
-  // Empty State
-  emptyContainer: { padding: 40, alignItems: 'center', borderRadius: 24, borderWidth: 1, borderStyle: 'dashed' },
-  emptyIllustration: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  emptyTitle: { fontSize: 22, fontWeight: '800', marginBottom: 8 },
-  emptySub: { fontSize: 15, fontWeight: '500', textAlign: 'center', marginBottom: 24 },
-  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 },
-  emptyBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  emptyTitle: {
+    ...Typography.headingMedium,
+    fontWeight: "700",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    ...Typography.bodyMedium,
+    textAlign: "center",
+    marginBottom: 20,
+    maxWidth: 280,
+  },
+  emptyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: UI.borderRadius.large,
+  },
+  emptyButtonText: {
+    color: "#fff",
+    ...Typography.labelLarge,
+    fontWeight: "700",
+  },
 });

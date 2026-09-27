@@ -1,6 +1,7 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
+import { Palette, Shadows, UI, Typography } from "@/constants/theme";
 import { useTheme } from "@/context/ThemeContext";
 import { MotiView } from "@/utils/moti-wrapper";
+import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 
 interface QuizOptionProps {
@@ -24,18 +25,23 @@ export default function QuizOption({
 }: QuizOptionProps) {
   const { theme, isDark } = useTheme();
 
-  let borderColor = isDark ? "#2A2C2E" : "#eee";
-  let bgColor = isDark ? "#111827" : "#fff";
+  let borderColor = theme.border;
+  let bgColor = theme.card;
 
-  if (isSelected) borderColor = theme.tint;
-  if (isCorrect) {
+  if (isSelected && !isCorrect && !isWrong) {
     borderColor = theme.tint;
-    bgColor = isDark ? "#064e3b" : "#f0fdf4";
+    bgColor = isDark ? 'rgba(99, 102, 241, 0.08)' : Palette.indigo50;
+  }
+  if (isCorrect) {
+    borderColor = Palette.emerald500;
+    bgColor = isDark ? 'rgba(16, 185, 129, 0.12)' : Palette.emerald50;
   }
   if (isWrong) {
-    borderColor = "#ff4444";
-    bgColor = isDark ? "#450a0a" : "#fff5f5";
+    borderColor = Palette.rose500;
+    bgColor = isDark ? 'rgba(244, 63, 94, 0.12)' : Palette.rose50;
   }
+
+  const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
   return (
     <MotiView
@@ -46,30 +52,44 @@ export default function QuizOption({
       <TouchableOpacity
         style={[
           styles.option,
-          { borderColor, backgroundColor: bgColor, marginBottom: 12 },
+          { 
+            borderColor, 
+            backgroundColor: bgColor,
+          },
+          isDark ? Shadows.dark.xs : Shadows.light.xs,
         ]}
         onPress={onPress}
         activeOpacity={0.7}
         disabled={disabled}
       >
+        {/* Letter badge */}
+        <Text
+          style={[
+            styles.letterBadge,
+            { 
+              color: isSelected ? theme.tint : theme.textTertiary,
+            },
+          ]}
+        >
+          {optionLetters[index] || ''}
+        </Text>
+
         <Text
           style={[
             styles.text,
             { color: theme.text },
-            isSelected && { color: theme.tint, fontWeight: "700" },
+            isSelected && !isCorrect && !isWrong && { color: theme.tint, fontWeight: "700" },
+            isCorrect && { color: Palette.emerald600, fontWeight: '700' },
+            isWrong && { color: Palette.rose500, fontWeight: '700' },
           ]}
         >
           {text}
         </Text>
         {isCorrect && (
-          <IconSymbol
-            name="checkmark.circle.fill"
-            size={20}
-            color={theme.tint}
-          />
+          <Ionicons name="checkmark-circle" size={22} color={Palette.emerald500} />
         )}
         {isWrong && (
-          <IconSymbol name="xmark.circle.fill" size={20} color="#ff4444" />
+          <Ionicons name="close-circle" size={22} color={Palette.rose500} />
         )}
       </TouchableOpacity>
     </MotiView>
@@ -78,17 +98,24 @@ export default function QuizOption({
 
 const styles = StyleSheet.create({
   option: {
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 2,
+    padding: 16,
+    paddingHorizontal: 18,
+    borderRadius: UI.borderRadius.large,
+    borderWidth: 1.5,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    gap: 12,
+    marginBottom: 10,
   },
-  text: { fontSize: 18, fontWeight: "500" },
+  letterBadge: {
+    ...Typography.labelSmall,
+    fontWeight: '800',
+    width: 20,
+    textAlign: 'center',
+  },
+  text: { 
+    ...Typography.bodyLarge, 
+    fontWeight: "500",
+    flex: 1,
+  },
 });
